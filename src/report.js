@@ -13,6 +13,34 @@ function esc(s) {
     .replaceAll('"', '&quot;');
 }
 
+const SOURCE_LABELS = { heuristique: 'Heuristique', ia: 'IA' };
+
+function findingsTable(findings, caption) {
+  if (!findings?.length) return '';
+  const rows = findings.map((f) => `
+      <tr>
+        <td><strong>${esc(f.criterion)}</strong></td>
+        <td>${esc(f.theme)}</td>
+        <td><span class="source source-${esc(f.source)}">${esc(SOURCE_LABELS[f.source] ?? f.source)}</span>${typeof f.confidence === 'number' ? ` (${Math.round(f.confidence * 100)} %)` : ''}</td>
+        <td><code>${esc(f.target)}</code></td>
+        <td>${esc(f.message)}</td>
+      </tr>`).join('');
+  return `
+      <table>
+        <caption>${esc(caption)}</caption>
+        <thead>
+          <tr>
+            <th scope="col">Critère RGAA</th>
+            <th scope="col">Thématique</th>
+            <th scope="col">Source</th>
+            <th scope="col">Cible</th>
+            <th scope="col">À vérifier</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+}
+
 /** Génère un rapport HTML autonome et accessible à partir du résumé JSON. */
 export function buildHtmlReport(summary) {
   const { totals } = summary;
@@ -55,6 +83,7 @@ export function buildHtmlReport(summary) {
         </thead>
         <tbody>${rows}</tbody>
       </table>` : '<p><strong>Aucune violation détectée.</strong></p>'}
+      ${findingsTable(p.findings, `Signalements à vérifier manuellement sur ${p.url} (non bloquants)`)}
     </section>`;
   }).join('');
 
@@ -63,6 +92,20 @@ export function buildHtmlReport(summary) {
       <h2 id="titre-erreurs">Pages non analysées</h2>
       <ul>${summary.errors.map((e) => `<li>${esc(e.url)} — ${esc(e.error)}</li>`).join('')}</ul>
     </section>` : '';
+
+  const siteFindingsHtml = summary.siteFindings?.length ? `
+    <section aria-labelledby="titre-site">
+      <h2 id="titre-site">Signalements à l'échelle du site</h2>
+      ${findingsTable(summary.siteFindings, 'Signalements inter-pages à vérifier manuellement (non bloquants)')}
+    </section>` : '';
+
+  const cov = summary.coverage;
+  const coverageHtml = cov ? `
+<p><em>Couverture : <strong>${cov.auto.length}</strong> critère(s) RGAA testé(s) automatiquement et <strong>${cov.review.length}</strong> couvert(s) par des signalements « à vérifier », sur ${cov.total} (${Math.round(((cov.auto.length + cov.review.length) / cov.total) * 100)} %).
+Les signalements (heuristiques${summary.config.ai ? ' et IA' : ''}) demandent une confirmation humaine et ne font pas échouer la CI.
+Un audit manuel reste indispensable pour une déclaration de conformité.</em></p>` : `
+<p><em>Avertissement : ces tests automatiques ne couvrent qu'une partie des critères RGAA.
+Un audit manuel reste indispensable pour une déclaration de conformité.</em></p>`;
 
   return `<!DOCTYPE html>
 <html lang="fr">
@@ -83,6 +126,9 @@ export function buildHtmlReport(summary) {
   .impact-serious { background: #b34000; color: #fff; }
   .impact-moderate { background: #716043; color: #fff; }
   .impact-minor { background: #eee; color: #1a1a1a; }
+  .source { padding: .15rem .5rem; border-radius: .25rem; font-weight: bold; white-space: nowrap; }
+  .source-heuristique { background: #e8edff; color: #000091; }
+  .source-ia { background: #feebcb; color: #6e445a; }
   .kpi { display: inline-block; margin-right: 2rem; }
   .kpi strong { font-size: 1.5rem; display: block; }
 </style>
@@ -90,8 +136,7 @@ export function buildHtmlReport(summary) {
 <body>
 <h1>Rapport d'accessibilité RGAA</h1>
 <p>Référentiel : ${esc(summary.referential)} — Généré le ${esc(new Date(summary.date).toLocaleString('fr-FR'))}</p>
-<p><em>Avertissement : ces tests automatiques ne couvrent qu'environ 30 % des critères RGAA.
-Un audit manuel reste indispensable pour une déclaration de conformité.</em></p>
+${coverageHtml}
 <section aria-labelledby="titre-synthese">
   <h2 id="titre-synthese">Synthèse</h2>
   <p>
@@ -100,9 +145,11 @@ Un audit manuel reste indispensable pour une déclaration de conformité.</em></
     <span class="kpi"><strong>${totals.violationsBySeverity.serious}</strong> sérieuses</span>
     <span class="kpi"><strong>${totals.violationsBySeverity.moderate}</strong> modérées</span>
     <span class="kpi"><strong>${totals.violationsBySeverity.minor}</strong> mineures</span>
+    <span class="kpi"><strong>${totals.findings ?? 0}</strong> signalements à vérifier</span>
   </p>
   <p>Seuil d'échec CI : <code>${esc(summary.config.failOn)}</code> — Occurrences au-dessus du seuil : <strong>${totals.violationsAboveThreshold}</strong> (tolérance : ${summary.config.maxViolations})</p>
 </section>
+${siteFindingsHtml}
 ${pagesHtml}
 ${errorsHtml}
 </body>

@@ -3,6 +3,9 @@ import { mkdirSync, writeFileSync, readFileSync, rmSync, existsSync } from 'node
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildHtmlReport } from './report.js';
+import { runCrossPageChecks } from './cross-page-checks.js';
+import { runAiChecks } from './ai-checker.js';
+import { coveredCriteria } from './rgaa-mapping.js';
 
 const PKG_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -42,6 +45,7 @@ export async function runAudit(conf) {
         httpHeaders: conf.httpHeaders,
         basicAuth: conf.basicAuth,
         waitAfterLoad: conf.waitAfterLoad,
+        ai: conf.ai?.enabled ? { maxItemsPerPage: conf.ai.maxItemsPerPage } : null,
         resultsFile
       }
     }
@@ -69,6 +73,20 @@ export async function runAudit(conf) {
     }
   }
 
+  // Tests inter-pages (12.1, 12.2) — signalements « à vérifier », jamais bloquants
+  const siteFindings = runCrossPageChecks(pages);
+
+  // Tier IA « à vérifier » (option --ai) — jamais bloquant
+  let aiUsage = null;
+  if (conf.ai?.enabled && pages.length) {
+    if (!conf.quiet) console.log('▶ Analyse IA des critères de jugement (signalements « à vérifier ») …');
+    aiUsage = await runAiChecks(pages, conf);
+  } else {
+    for (const p of pages) delete p.aiExtracts;
+  }
+
+  const findingsCount = pages.reduce((s, p) => s + (p.findings?.length ?? 0), 0) + siteFindings.length;
+
   // Comptage des violations au-dessus du seuil
   let failingCount = 0;
   const bySeverity = { critical: 0, serious: 0, moderate: 0, minor: 0 };
@@ -87,15 +105,20 @@ export async function runAudit(conf) {
       failOn: conf.failOn,
       maxViolations: conf.maxViolations,
       viewport: conf.viewport,
-      ignoreRules: conf.ignoreRules
+      ignoreRules: conf.ignoreRules,
+      ai: !!conf.ai?.enabled
     },
+    coverage: coveredCriteria({ ai: !!conf.ai?.enabled }),
     totals: {
       pages: pages.length,
       pageErrors: errors.length,
       violationsBySeverity: bySeverity,
-      violationsAboveThreshold: failingCount
+      violationsAboveThreshold: failingCount,
+      findings: findingsCount
     },
+    aiUsage,
     pages,
+    siteFindings,
     errors
   };
 
@@ -114,6 +137,11 @@ export async function runAudit(conf) {
     console.log('\n════════ Résumé RGAA ════════');
     console.log(`Pages analysées : ${pages.length} (erreurs : ${errors.length})`);
     console.log(`Occurrences par sévérité : critique=${bySeverity.critical} sérieuse=${bySeverity.serious} modérée=${bySeverity.moderate} mineure=${bySeverity.minor}`);
+    console.log(`Signalements « à vérifier » (heuristiques${conf.ai?.enabled ? ' + IA' : ''}) : ${findingsCount} — non bloquants`);
+    console.log(`Couverture : ${summary.coverage.auto.length} critère(s) testé(s) automatiquement + ${summary.coverage.review.length} signalé(s) à vérifier, sur ${summary.coverage.total}`);
+    if (aiUsage?.calls) {
+      console.log(`Consommation IA : ${aiUsage.calls} appel(s), ${aiUsage.inputTokens} tokens en entrée + ${aiUsage.outputTokens} en sortie (${aiUsage.model})`);
+    }
     console.log(`Seuil d'échec : ${conf.failOn} (tolérance : ${conf.maxViolations})`);
     console.log(`Rapports : ${jsonPath}${conf.html ? ` et ${join(outputDir, 'rgaa-report.html')}` : ''}`);
   }

@@ -2,4 +2,6 @@ node_modules/
 rgaa-report/
 rgaa-run*/
 rgaa-test-action/
-rgaa-cartesgouv/
+rgaa-cartesgouv*/
+rgaa-cartosp*/
+.env

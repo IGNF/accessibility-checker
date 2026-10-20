@@ -1,8 +1,10 @@
 # rgaa-ci — Tests d'accessibilité RGAA automatisés pour CI
 
 Outil en ligne de commande qui exécute les tests d'accessibilité **automatisables du RGAA 4.1**
-(environ 30 % des critères) sur une liste de pages web, et fait échouer le pipeline CI
-en cas de violations.
+sur une liste de pages web, et fait échouer le pipeline CI en cas de violations.
+En complément des tests déterministes (~30 critères), un tier optionnel de **signalements
+« à vérifier »** (heuristiques et IA) étend la couverture à une quarantaine de critères,
+sans jamais faire échouer la CI.
 
 Il s'appuie sur [axe-core](https://github.com/dequelabs/axe-core) (moteur de référence,
 locale française) piloté par **Cypress** (via [cypress-axe](https://github.com/component-driven/cypress-axe)),
@@ -13,6 +15,7 @@ avec une **table de correspondance règles axe → critères RGAA** ([src/rgaa-m
 
 📘 **Vous voulez juste utiliser l'outil sur votre plateforme ?**
 Suivez le [guide développeur](GUIDE-DEVELOPPEUR.md) (2 fichiers à créer, 5 minutes).
+Pour lancer un audit depuis votre poste : [guide d'utilisation en local](GUIDE-UTILISATION-LOCALE.md).
 
 ## Installation
 
@@ -46,6 +49,9 @@ node bin/rgaa-ci.js --config rgaa.config.json
 | `--max-violations <n>` | Tolérance d'occurrences au-dessus du seuil | `0` |
 | `--viewport <LxH>` | Taille du viewport | `1280x720` |
 | `--timeout <ms>` | Timeout de chargement | `30000` |
+| `--ai` | Active les signalements IA « à vérifier » (nécessite `ANTHROPIC_API_KEY`) | désactivé |
+| `--ai-model <nom>` | Modèle Anthropic utilisé | `claude-haiku-4-5` |
+| `--ai-max-items <n>` | Éléments max soumis à l'IA par page | `20` |
 | `--no-html` | Désactive le rapport HTML | — |
 | `--quiet` | Sortie console minimale | — |
 
@@ -55,7 +61,18 @@ Voir [rgaa.config.json](rgaa.config.json). Champs supplémentaires disponibles :
 
 - `ignoreRules` : liste de règles axe à désactiver (ex. `["color-contrast"]`) ;
 - `httpHeaders` : en-têtes HTTP à envoyer (ex. jeton d'accès à un environnement de recette) ;
-- `basicAuth` : `{ "username": "...", "password": "..." }`.
+- `basicAuth` : `{ "username": "...", "password": "..." }` ;
+- `ai` : `{ "enabled": true, "model": null, "maxItemsPerPage": 20 }` — la clé API n'est
+  **jamais** mise dans ce fichier : uniquement la variable d'environnement `ANTHROPIC_API_KEY`.
+
+### Coût et réseau du mode IA
+
+- La consommation de tokens est affichée dans le résumé console et écrite dans le
+  rapport JSON (champ `aiUsage`). Ordre de grandeur avec le modèle par défaut :
+  ≈ 4 500 tokens par page, soit moins d'un centime de dollar par page.
+- Derrière un proxy d'entreprise, le `fetch` natif de Node ignore `http_proxy`/`https_proxy` :
+  lancer la commande avec `NODE_USE_ENV_PROXY=1` (Node ≥ 24), sinon l'appel à l'API
+  Anthropic échoue avec « fetch failed ».
 
 ### Codes de sortie
 
@@ -99,7 +116,8 @@ jobs:
 
 Entrées disponibles : `urls`, `sitemap`, `config` (un `rgaa.config.json` du dépôt appelant,
 ajouter alors un `actions/checkout` avant), `fail-on`, `max-violations`, `max-pages`,
-`output`, `comment-pr`, `artifact-name`, `github-token`.
+`output`, `comment-pr`, `artifact-name`, `github-token`, `ai`, `ai-model` et
+`anthropic-api-key` (à passer via `${{ secrets.ANTHROPIC_API_KEY }}`, jamais en clair).
 
 L'action publie les rapports en artefact, **commente automatiquement la pull request**
 avec la synthèse par critère RGAA (commentaire mis à jour à chaque push), et fait échouer
@@ -121,13 +139,24 @@ les URLs vers `http://localhost:<port>`.
 
 ## Couverture RGAA
 
-Politique « tests solides » : seules sont mappées les règles axe taguées WCAG A/AA
-(réellement exécutées) et dont une violation prouve objectivement l'échec du critère.
-Les critères reposant sur un jugement humain (pertinence d'une alternative, d'une
-étiquette, d'un intitulé de lien, caractère décoratif d'une image, ordre de
-tabulation…) ne sont **pas** revendiqués comme couverts.
+Deux niveaux de résultats, pour concilier couverture et fiabilité :
 
-Critères vérifiés (partiellement) : 1.1, 2.1, 2.2, 3.1, 3.2, 4.3, 4.10, 5.7, 6.2,
-7.1, 7.3, 8.2–8.5, 8.8, 9.3, 10.4, 10.12, 11.1, 11.13, 12.7, 13.1, 13.8.
+1. **Violations (bloquantes selon `--fail-on`)** — politique « tests solides » : règles axe
+   taguées WCAG A/AA, règles « best practice » rendues normatives par le RGAA (hiérarchie de
+   titres, landmarks…) et vérifications maison (doctype, balises de présentation, fieldset
+   sans légende, reflow à 320 px), dont une violation prouve objectivement l'échec du critère.
+   Critères concernés : 1.1, 2.1, 2.2, 3.1, 3.2, 4.3, 4.10, 5.7, 6.2, 7.1, 7.3, 8.1–8.5,
+   8.8, 8.9, 9.1–9.3, 10.4, 10.11, 10.12, 11.1, 11.6, 11.13, 12.6, 12.7, 13.1, 13.8.
+2. **Signalements « à vérifier » (jamais bloquants)** — détections demandant une confirmation
+   humaine :
+   - heuristiques : focus visible (10.7), piège clavier (12.9), systèmes de navigation (12.1)
+     et cohérence des menus entre pages (12.2) ;
+   - IA (option `--ai`, API Anthropic) : pertinence des alternatives d'images (1.2, 1.3),
+     liens explicites (6.1), titre de page (8.6), changements de langue (8.7), pertinence
+     des titres (9.1), étiquettes (11.2) et intitulés de bouton (11.9).
+
+Le rapport affiche la couverture effective (critères testés / 106). Les signalements IA
+peuvent comporter des faux positifs : ils alimentent une revue humaine, pas une déclaration
+de conformité.
 
 Le détail règle par règle se trouve dans [src/rgaa-mapping.js](src/rgaa-mapping.js).

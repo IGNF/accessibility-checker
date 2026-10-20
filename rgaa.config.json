@@ -12,5 +12,10 @@
   "html": true,
   "ignoreRules": [],
   "httpHeaders": {},
-  "basicAuth": null
+  "basicAuth": null,
+  "ai": {
+    "enabled": false,
+    "model": null,
+    "maxItemsPerPage": 20
+  }
 }

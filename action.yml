@@ -33,6 +33,18 @@ inputs:
     description: "Dossier de sortie des rapports"
     required: false
     default: "rgaa-report"
+  ai:
+    description: "Activer les signalements IA « à vérifier » (nécessite anthropic-api-key) : true | false"
+    required: false
+    default: "false"
+  ai-model:
+    description: "Modèle Anthropic utilisé pour les signalements IA (défaut : claude-haiku-4-5)"
+    required: false
+    default: ""
+  anthropic-api-key:
+    description: "Clé API Anthropic — passer un secret (secrets.ANTHROPIC_API_KEY), jamais en clair"
+    required: false
+    default: ""
   comment-pr:
     description: "Poster/mettre à jour un commentaire de synthèse sur la pull request"
     required: false
@@ -82,11 +94,18 @@ runs:
         INPUT_MAX_VIOLATIONS: ${{ inputs.max-violations }}
         INPUT_MAX_PAGES: ${{ inputs.max-pages }}
         INPUT_OUTPUT: ${{ inputs.output }}
+        INPUT_AI: ${{ inputs.ai }}
+        INPUT_AI_MODEL: ${{ inputs.ai-model }}
+        INPUT_AI_KEY: ${{ inputs.anthropic-api-key }}
       run: |
+        # La clé ne transite que par l'environnement, jamais en argument (visible dans ps/logs)
+        [ -n "$INPUT_AI_KEY" ] && export ANTHROPIC_API_KEY="$INPUT_AI_KEY"
         ARGS=()
         [ -n "$INPUT_CONFIG" ] && ARGS+=(--config "$INPUT_CONFIG")
         for u in $INPUT_URLS; do ARGS+=(--url "$u"); done
         [ -n "$INPUT_SITEMAP" ] && ARGS+=(--sitemap "$INPUT_SITEMAP" --max-pages "$INPUT_MAX_PAGES")
+        [ "$INPUT_AI" = "true" ] && ARGS+=(--ai)
+        [ -n "$INPUT_AI_MODEL" ] && ARGS+=(--ai-model "$INPUT_AI_MODEL")
         set +e
         node "$GITHUB_ACTION_PATH/bin/rgaa-ci.js" "${ARGS[@]}" \
           --output "$INPUT_OUTPUT" \

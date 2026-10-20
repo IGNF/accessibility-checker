@@ -28,6 +28,12 @@ Options :
   --max-violations <n>   Nombre max de violations tolérées au-dessus du seuil (défaut : 0)
   --viewport <LxH>       Taille du viewport, ex. 1280x720 (défaut : 1280x720)
   --timeout <ms>         Timeout de chargement de page (défaut : 30000)
+  --ai                   Activer les signalements IA « à vérifier » (critères de
+                         jugement : 1.2, 1.3, 6.1, 8.6, 8.7, 11.2, 11.9…).
+                         Nécessite la variable d'environnement ANTHROPIC_API_KEY.
+                         Jamais bloquant pour la CI.
+  --ai-model <nom>       Modèle Anthropic à utiliser (défaut : claude-haiku-4-5)
+  --ai-max-items <n>     Nombre max d'éléments soumis à l'IA par page (défaut : 20)
   --no-html              Ne pas générer le rapport HTML
   --quiet                Sortie console minimale
   --help                 Affiche cette aide
@@ -53,6 +59,9 @@ function parseArgs(argv) {
       case '--max-violations': args.maxViolations = Number(argv[++i]); break;
       case '--viewport': args.viewport = argv[++i]; break;
       case '--timeout': args.timeout = Number(argv[++i]); break;
+      case '--ai': args.ai = true; break;
+      case '--ai-model': args.aiModel = argv[++i]; break;
+      case '--ai-max-items': args.aiMaxItems = Number(argv[++i]); break;
       case '--no-html': args.html = false; break;
       case '--quiet': args.quiet = true; break;
       case '--help': case '-h': printHelp(); process.exit(0); break;
@@ -95,7 +104,12 @@ function loadConfig(args) {
     ignoreRules: fileConf.ignoreRules ?? [],
     waitAfterLoad: fileConf.waitAfterLoad ?? 1000,
     httpHeaders: fileConf.httpHeaders ?? {},
-    basicAuth: fileConf.basicAuth ?? null
+    basicAuth: fileConf.basicAuth ?? null,
+    ai: {
+      enabled: args.ai ?? fileConf.ai?.enabled ?? false,
+      model: args.aiModel ?? fileConf.ai?.model ?? null,
+      maxItemsPerPage: args.aiMaxItems ?? fileConf.ai?.maxItemsPerPage ?? 20
+    }
   };
 
   if (!conf.urls.length && !conf.sitemap) {
@@ -107,6 +121,11 @@ function loadConfig(args) {
   const levels = ['critical', 'serious', 'moderate', 'minor', 'any'];
   if (!levels.includes(conf.failOn)) {
     console.error(`--fail-on doit être : ${levels.join(' | ')}`);
+    process.exit(2);
+  }
+
+  if (conf.ai.enabled && !process.env.ANTHROPIC_API_KEY) {
+    console.error('--ai nécessite la variable d\'environnement ANTHROPIC_API_KEY (ne mettez jamais la clé dans un fichier versionné).');
     process.exit(2);
   }
 

@@ -22,6 +22,9 @@ node bin/rgaa-ci.js --url https://ma-plateforme.fr
 Ouvrez ensuite `rgaa-report/rgaa-report.html` dans un navigateur :
 chaque violation y figure avec le code HTML fautif et comment la corriger.
 
+Plus de détails (options, dépannage, audit d'une appli locale) :
+[guide d'utilisation en local](GUIDE-UTILISATION-LOCALE.md).
+
 ---
 
 ## 2. Intégrer à votre dépôt GitHub (2 fichiers à créer)
@@ -81,6 +84,7 @@ jobs:
 | Recette protégée par mot de passe | `"basicAuth": { "username": "…", "password": "…" }` |
 | Ignorer une règle (faux positif assumé) | `"ignoreRules": ["color-contrast"]` |
 | Appli non déployée | Démarrez-la dans un step précédent, puis `"urls": ["http://localhost:3000"]` |
+| Signalements IA « à vérifier » (liens explicites, pertinence des alternatives…) | `ai: "true"` + `anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}` dans le `with:` de l'action — jamais bloquant, nécessite un secret de dépôt |
 
 Toutes les options : voir le [README](README.md).
 

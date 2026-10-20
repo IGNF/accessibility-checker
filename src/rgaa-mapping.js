@@ -1,9 +1,13 @@
 /**
  * Correspondance règles axe-core → critères RGAA 4.1.
- * Politique « tests solides » : seules figurent les règles taguées WCAG A/AA
- * (donc réellement exécutées par le runner) et dont une violation prouve
- * objectivement l'échec du critère. Les critères de pertinence (jugement
- * humain : 1.2, 1.3, 3.3, 6.1, 8.7, 9.1, 9.2, 11.2, 11.7, 12.8…) sont exclus.
+ * Politique « tests solides » : seules figurent les règles dont une violation
+ * prouve objectivement l'échec du critère : règles axe taguées WCAG A/AA,
+ * règles axe « best practice » explicitement activées lorsque le RGAA les rend
+ * normatives (9.1, 9.2, 12.6), et vérifications maison (préfixe rgaa-,
+ * implémentées dans src/custom-checks.js).
+ * Les critères de pertinence (jugement humain : 1.2, 1.3, 6.1, 8.6, 11.2…)
+ * restent exclus des violations : ils sont traités par le tier « à vérifier »
+ * (signalements heuristiques et IA, jamais bloquants pour la CI).
  * Chaque entrée : ruleId axe → { rgaa: [critères], theme }.
  */
 export const AXE_TO_RGAA = {
@@ -66,7 +70,7 @@ export const AXE_TO_RGAA = {
   'duplicate-id-aria':    { rgaa: ['8.2'], theme: 'Éléments obligatoires' },
   'meta-refresh':         { rgaa: ['13.1'], theme: 'Consultation' },
 
-  // Thématique 9 — Structuration (9.1/9.2 exclus : règles axe uniquement best-practice, jamais exécutées ici)
+  // Thématique 9 — Structuration (9.1/9.2 : via les règles best-practice activées ci-dessous)
   'list':                 { rgaa: ['9.3'], theme: 'Structuration' },
   'listitem':             { rgaa: ['9.3'], theme: 'Structuration' },
   'definition-list':      { rgaa: ['9.3'], theme: 'Structuration' },
@@ -89,8 +93,64 @@ export const AXE_TO_RGAA = {
   // Thématique 13 — Consultation
   'blink':                { rgaa: ['13.8'], theme: 'Consultation' },
   'marquee':              { rgaa: ['13.8'], theme: 'Consultation' },
-  'server-side-image-map': { rgaa: ['1.1'], theme: 'Images' }
+  'server-side-image-map': { rgaa: ['1.1'], theme: 'Images' },
+
+  // Règles axe « best practice » activées explicitement (normatives en RGAA)
+  'heading-order':        { rgaa: ['9.1'], theme: 'Structuration' },   // 9.1.3 : hiérarchie de titres cohérente
+  'page-has-heading-one': { rgaa: ['9.1'], theme: 'Structuration' },   // 9.1.1 : présence d'un titre principal
+  'empty-heading':        { rgaa: ['9.1'], theme: 'Structuration' },   // un titre vide ne structure rien
+  'landmark-one-main':    { rgaa: ['9.2'], theme: 'Structuration' },   // 9.2.1 : zone de contenu principal unique
+  'landmark-no-duplicate-banner':      { rgaa: ['9.2'], theme: 'Structuration' }, // 9.2.1 : en-tête unique
+  'landmark-no-duplicate-contentinfo': { rgaa: ['9.2'], theme: 'Structuration' }, // 9.2.1 : pied de page unique
+  'region':               { rgaa: ['12.6'], theme: 'Navigation' },     // 12.6 : contenu hors zone de regroupement
+
+  // Vérifications maison (src/custom-checks.js)
+  'rgaa-doctype':         { rgaa: ['8.1'], theme: 'Éléments obligatoires' }, // 8.1.1/8.1.2 : doctype présent et valide
+  'rgaa-presentation-markup': { rgaa: ['8.9'], theme: 'Éléments obligatoires' }, // 8.9.1 : balises/attributs de présentation
+  'rgaa-fieldset-legend': { rgaa: ['11.6'], theme: 'Formulaires' },    // 11.6.1 : regroupement de champs sans légende
+  'rgaa-reflow-320':      { rgaa: ['10.11'], theme: 'Présentation' }   // 10.11.1 : défilement horizontal à 320 px
 };
+
+/** Règles axe hors tags WCAG à activer explicitement (normatives en RGAA). */
+export const BEST_PRACTICE_RULES = [
+  'heading-order',
+  'page-has-heading-one',
+  'empty-heading',
+  'landmark-one-main',
+  'landmark-no-duplicate-banner',
+  'landmark-no-duplicate-contentinfo',
+  'region'
+];
+
+/** Critères couverts par des signalements heuristiques « à vérifier » (jamais bloquants). */
+export const HEURISTIC_CRITERIA = ['10.7', '12.1', '12.2', '12.9'];
+
+/** Critères couverts par les signalements IA « à vérifier » (option --ai). */
+export const AI_CRITERIA = ['1.2', '1.3', '6.1', '8.6', '8.7', '9.1', '11.2', '11.9'];
+
+const THEME_BY_SECTION = {
+  1: 'Images', 2: 'Cadres', 3: 'Couleurs', 4: 'Multimédia', 5: 'Tableaux',
+  6: 'Liens', 7: 'Scripts', 8: 'Éléments obligatoires', 9: 'Structuration',
+  10: 'Présentation', 11: 'Formulaires', 12: 'Navigation', 13: 'Consultation'
+};
+
+/** Thématique RGAA d'un critère (« 8.6 » → « Éléments obligatoires »). */
+export function themeOf(critere) {
+  return THEME_BY_SECTION[Number(String(critere).split('.')[0])] ?? '';
+}
+
+/** Couverture du référentiel : critères testés automatiquement / signalés « à vérifier ». */
+export function coveredCriteria({ ai = false } = {}) {
+  const auto = [...new Set(Object.values(AXE_TO_RGAA).flatMap((e) => e.rgaa))];
+  const review = [...new Set([...HEURISTIC_CRITERIA, ...(ai ? AI_CRITERIA : [])])]
+    .filter((c) => !auto.includes(c));
+  const byNum = (a, b) => {
+    const [ta, ca] = a.split('.').map(Number);
+    const [tb, cb] = b.split('.').map(Number);
+    return ta - tb || ca - cb;
+  };
+  return { auto: auto.sort(byNum), review: review.sort(byNum), total: 106 };
+}
 
 /** Retourne le mapping RGAA pour une règle axe, ou une valeur par défaut. */
 export function mapRule(ruleId) {
