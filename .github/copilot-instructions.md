@@ -13,7 +13,7 @@ Outil CLI de tests d'accessibilité RGAA 4.1 automatisés pour CI, basé sur axe
 
 ## Conventions
 
-- ESM uniquement (`type: module`), Node ≥ 18, pas de dépendance ajoutée sans nécessité.
+- ESM uniquement (`type: module`), Node ≥ 20.1, pas de dépendance ajoutée sans nécessité.
 - Code, commentaires et messages utilisateur **en français**.
 - Locale française d'axe-core pour les messages de violations.
 - Toute modification du mapping doit citer le critère RGAA officiel et justifier la solidité du test (voir l'en-tête de [src/rgaa-mapping.js](../src/rgaa-mapping.js)).

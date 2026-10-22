@@ -167,7 +167,7 @@ Codes de sortie : `0` = OK, `1` = seuil dépassé, `2` = erreur (page inaccessib
 ## 6. Questions fréquentes
 
 **Le job échoue dès l'installation ?**
-Vérifiez Node ≥ 18. Le binaire Cypress (~200 Mo) est mis en cache automatiquement
+Vérifiez Node ≥ 20.1. Le binaire Cypress (~200 Mo) est mis en cache automatiquement
 par l'action après le premier run.
 
 **Une violation est un faux positif ?**
