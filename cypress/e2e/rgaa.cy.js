@@ -6,7 +6,7 @@
  * actif, les extraits soumis au tier IA. Les résultats sont remontés au
  * processus Node via cy.task ; le seuil d'échec est appliqué par la CLI.
  */
-import { mapRule, BEST_PRACTICE_RULES } from '../../src/rgaa-mapping.js';
+import { mapRule, BEST_PRACTICE_RULES, AXE_REVIEW_RULES, AXE_INCOMPLETE_RULES, AXE_EXPERIMENTAL_RULES } from '../../src/rgaa-mapping.js';
 import {
   runCustomChecks,
   checkReflow,
@@ -23,6 +23,8 @@ const AXE_OPTIONS = {
   rules: {
     // Règles « best practice » rendues normatives par le RGAA (9.1, 9.2, 12.6)
     ...Object.fromEntries(BEST_PRACTICE_RULES.map((r) => [r, { enabled: true }])),
+    // Règles expérimentales : activées, mais routées vers les signalements « à vérifier »
+    ...Object.fromEntries(Object.keys(AXE_EXPERIMENTAL_RULES).map((r) => [r, { enabled: true }])),
     ...Object.fromEntries((conf.ignoreRules ?? []).map((r) => [r, { enabled: false }]))
   }
 };
@@ -97,7 +99,39 @@ describe('Audit RGAA (critères automatisables)', () => {
         .then((results) => {
           page.passesCount = results.passes.length;
           page.incompleteCount = results.incomplete.length;
-          page.violations = results.violations.map(toViolation);
+          // Les échecs des règles expérimentales deviennent des signalements, pas des violations
+          for (const v of results.violations) {
+            const exp = AXE_EXPERIMENTAL_RULES[v.id];
+            if (!exp) {
+              page.violations.push(toViolation(v));
+              continue;
+            }
+            for (const criterion of exp.rgaa) {
+              page.findings.push({
+                criterion,
+                theme: exp.theme,
+                source: 'axe',
+                target: v.nodes.slice(0, 5).map((n) => n.target.join(' ')).join(' ; '),
+                message: `${v.help} (règle axe expérimentale « ${v.id} », à confirmer manuellement).`
+              });
+            }
+          }
+          // Règles « reviewOnFail » (bypass, frame-title-unique…) : axe classe
+          // leur échec en incomplete → signalement « à vérifier », jamais bloquant.
+          // Idem pour les règles où axe ne peut pas conclure (color-contrast sur fond d'image…).
+          for (const inc of results.incomplete) {
+            const review = AXE_REVIEW_RULES[inc.id] ?? AXE_INCOMPLETE_RULES[inc.id];
+            if (!review) continue;
+            for (const criterion of review.rgaa) {
+              page.findings.push({
+                criterion,
+                theme: review.theme,
+                source: 'axe',
+                target: inc.nodes.slice(0, 5).map((n) => n.target.join(' ')).join(' ; '),
+                message: `${inc.help} (règle axe « ${inc.id} », à confirmer manuellement).`
+              });
+            }
+          }
         });
 
       // Vérifications maison, signalements heuristiques et collectes complémentaires

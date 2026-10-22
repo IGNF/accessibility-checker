@@ -13,7 +13,7 @@ de régression et poste un rapport directement dans la PR.
 ## 1. Essayer en 2 minutes (en local)
 
 ```bash
-git clone https://github.com/tgerbeau/accessibility-checker
+git clone https://github.com/IGNF/accessibility-checker
 cd accessibility-checker
 npm install
 node bin/rgaa-ci.js --url https://ma-plateforme.fr
@@ -60,7 +60,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: tgerbeau/accessibility-checker@v1
+      - uses: IGNF/accessibility-checker@v1
         with:
           config: rgaa.config.json
 ```
@@ -180,4 +180,4 @@ qu'après interaction (modales, menus…) ne sont pas couverts : ils relèvent d
 l'audit manuel.
 
 **Qui contacter ?**
-Ouvrez une issue sur le dépôt [tgerbeau/accessibility-checker](https://github.com/tgerbeau/accessibility-checker/issues).
+Ouvrez une issue sur le dépôt [IGNF/accessibility-checker](https://github.com/IGNF/accessibility-checker/issues).

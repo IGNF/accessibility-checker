@@ -4,4 +4,10 @@ rgaa-run*/
 rgaa-test-action/
 rgaa-cartesgouv*/
 rgaa-cartosp*/
+rgaa-boutique-ign*/
+rgaa-remonterletemps/
+pf-*/
+rapport-rgaa-global.*
+test/.tmp/
+test/.tmp-ia/
 .env

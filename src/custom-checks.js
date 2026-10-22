@@ -140,9 +140,49 @@ export function checkReflow(win) {
   };
 }
 
-/** Signalements heuristiques « à vérifier » : 10.7 et 12.9. */
+/** Signalements heuristiques « à vérifier » : 4.1, 10.5, 10.7, 12.7, 12.8, 12.9 et 13.3. */
 export function collectFindings(win) {
-  return [...scanFocusSuppression(win), ...scanTabBlocking(win)];
+  return [
+    ...scanFocusSuppression(win),
+    ...scanTabBlocking(win),
+    ...scanSkipLink(win),
+    ...scanPositiveTabindex(win),
+    ...scanOfficeDocuments(win),
+    ...scanMultimedia(win),
+    ...scanDefaultBackground(win)
+  ];
+}
+
+// RGAA 4.1 : présence de médias temporels → transcription/sous-titres/audiodescription à vérifier
+function scanMultimedia(win) {
+  const media = Array.from(win.document.querySelectorAll(
+    'video, audio, iframe[src*="youtube" i], iframe[src*="youtu.be" i], iframe[src*="vimeo" i], iframe[src*="dailymotion" i]'
+  ));
+  if (!media.length) return [];
+  return [{
+    criterion: '4.1',
+    theme: 'Multimédia',
+    source: 'heuristique',
+    target: media.slice(0, 5).map(cssPath).join(' ; '),
+    message: `${media.length} média(s) temporel(s) détecté(s). Vérifier la transcription textuelle (4.1), les sous-titres synchronisés (4.3) et l'audiodescription (4.5).`
+  }];
+}
+
+// RGAA 10.5 : couleurs de police utilisées sans couleur de fond définie (fond par défaut du navigateur)
+function scanDefaultBackground(win) {
+  const transparent = (el) => {
+    const bg = win.getComputedStyle(el).backgroundColor;
+    return bg === 'transparent' || /^rgba\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*0\s*\)$/.test(bg);
+  };
+  const doc = win.document;
+  if (!transparent(doc.documentElement) || !transparent(doc.body)) return [];
+  return [{
+    criterion: '10.5',
+    theme: 'Présentation',
+    source: 'heuristique',
+    target: 'html, body',
+    message: 'Aucune couleur de fond n\u2019est définie sur html/body : la page repose sur le fond par défaut du navigateur. Vérifier que chaque couleur de police s\u2019accompagne d\u2019une couleur de fond définie (RGAA 10.5).'
+  }];
 }
 
 // RGAA 10.7 : règles CSS qui suppriment l'indicateur de focus sans alternative dans la même règle
@@ -202,6 +242,62 @@ function scanTabBlocking(win) {
   }];
 }
 
+// RGAA 12.7 : présence d'un lien d'évitement vers la zone de contenu principal
+function scanSkipLink(win) {
+  const doc = win.document;
+  const anchors = Array.from(doc.querySelectorAll('a[href^="#"]')).filter((a) => a.hash.length > 1);
+  const hasSkip = anchors.some((a) => {
+    const target = doc.getElementById(decodeURIComponent(a.hash.slice(1)));
+    if (!target) return false;
+    return target.matches('main, [role="main"]') || /contenu|content|main/i.test(target.id) ||
+      /aller au contenu|accès rapide|skip|éviter/i.test(a.textContent);
+  });
+  if (hasSkip) return [];
+  return [{
+    criterion: '12.7',
+    theme: 'Navigation',
+    source: 'heuristique',
+    target: 'body',
+    message: 'Aucun lien d’évitement (ancre interne) vers la zone de contenu principal n’a été trouvé. Vérifier au clavier qu’un accès rapide au contenu existe.'
+  }];
+}
+
+// RGAA 12.8 : tabindex positifs = ordre de tabulation imposé, souvent incohérent
+function scanPositiveTabindex(win) {
+  const offenders = Array.from(win.document.querySelectorAll('[tabindex]'))
+    .filter((el) => Number(el.getAttribute('tabindex')) > 0);
+  if (!offenders.length) return [];
+  return [{
+    criterion: '12.8',
+    theme: 'Navigation',
+    source: 'heuristique',
+    target: offenders.slice(0, 5).map(cssPath).join(' ; '),
+    message: `${offenders.length} élément(s) avec tabindex positif imposent un ordre de tabulation artificiel. Vérifier au clavier que l’ordre de tabulation reste cohérent.`
+  }];
+}
+
+const OFFICE_EXT = /\.(pdf|docx?|odt|ods|odp|xlsx?|pptx?|rtf)([?#]|$)/i;
+
+// RGAA 13.3 : documents bureautiques en téléchargement → vérifier leur accessibilité
+function scanOfficeDocuments(win) {
+  const seen = new Set();
+  const docs = [];
+  for (const a of Array.from(win.document.querySelectorAll('a[href]'))) {
+    const href = a.getAttribute('href') ?? '';
+    if (!OFFICE_EXT.test(href) || seen.has(href)) continue;
+    seen.add(href);
+    docs.push(a);
+  }
+  if (!docs.length) return [];
+  return [{
+    criterion: '13.3',
+    theme: 'Consultation',
+    source: 'heuristique',
+    target: docs.slice(0, 10).map((a) => a.getAttribute('href')).join(' ; '),
+    message: `${docs.length} document(s) bureautique(s) en téléchargement (PDF, Office…). Vérifier que chacun est accessible (balisage, ordre de lecture) ou possède une version accessible équivalente.`
+  }];
+}
+
 /** Caractéristiques de page pour les tests inter-pages (12.1, 12.2). */
 export function collectPageFeatures(win) {
   const doc = win.document;
@@ -254,11 +350,22 @@ export function collectAiExtracts(win, maxItems = 20) {
     .filter(isVisible).slice(0, maxItems).map((f) => ({
       type: f.type ?? f.tagName.toLowerCase(),
       name: f.name ?? '',
-      etiquette: labelOf(f).slice(0, 120)
+      etiquette: labelOf(f).slice(0, 120),
+      regroupement: txt(f.closest('fieldset')?.querySelector(':scope > legend')) ||
+        (f.closest('[role="group"], [role="radiogroup"]')?.getAttribute('aria-label') ?? '')
     }));
 
   const headings = Array.from(doc.querySelectorAll('h1, h2, h3, h4, h5, h6')).slice(0, 20)
     .map((h) => ({ niveau: Number(h.tagName[1]), texte: txt(h).slice(0, 120) }));
+
+  // Plan des zones de regroupement (9.2) : landmarks dans l'ordre du document
+  const landmarks = Array.from(doc.querySelectorAll(
+    'header, nav, main, footer, aside, [role="banner"], [role="navigation"], [role="main"], [role="contentinfo"], [role="complementary"], [role="search"]'
+  )).slice(0, 15).map((el) => ({
+    balise: el.tagName.toLowerCase(),
+    role: el.getAttribute('role') ?? '',
+    chemin: cssPath(el)
+  }));
 
   const bigEnough = (img) => img.naturalWidth >= 32 && img.naturalHeight >= 32;
   const imagesDecoratives = Array.from(doc.querySelectorAll(
@@ -268,7 +375,12 @@ export function collectAiExtracts(win, maxItems = 20) {
     .filter((i) => i.src);
   const imagesInformatives = Array.from(doc.querySelectorAll('img[alt]:not([alt=""])'))
     .filter((i) => isVisible(i) && bigEnough(i)).slice(0, 8)
-    .map((i) => ({ src: absUrl(i.getAttribute('src')), alt: i.getAttribute('alt').slice(0, 200) }))
+    .map((i) => ({
+      src: absUrl(i.getAttribute('src')),
+      alt: i.getAttribute('alt').slice(0, 200),
+      descriptionDetaillee: !!(i.getAttribute('longdesc') || i.getAttribute('aria-describedby') ||
+        i.closest('figure')?.querySelector('figcaption'))
+    }))
     .filter((i) => i.src);
 
   return {
@@ -276,6 +388,7 @@ export function collectAiExtracts(win, maxItems = 20) {
     titre: doc.title,
     h1: txt(doc.querySelector('h1')),
     headings,
+    landmarks,
     liens,
     boutons,
     champs,

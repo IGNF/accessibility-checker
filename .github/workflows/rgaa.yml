@@ -1,5 +1,5 @@
 # Workflow d'exemple : à copier dans les dépôts consommateurs en remplaçant
-# `uses: ./` par `uses: tgerbeau/accessibility-checker@v1`.
+# `uses: ./` par `uses: IGNF/accessibility-checker@v1`.
 name: Accessibilité RGAA
 
 on:
@@ -17,7 +17,7 @@ jobs:
       - uses: actions/checkout@v4 # pour lire rgaa.config.json
 
       - name: Tests d'accessibilité RGAA
-        uses: ./ # dans un autre dépôt : tgerbeau/accessibility-checker@v1
+        uses: ./ # dans un autre dépôt : IGNF/accessibility-checker@v1
         with:
           config: rgaa.config.json
           fail-on: serious

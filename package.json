@@ -8,6 +8,8 @@
   },
   "scripts": {
     "test": "node bin/rgaa-ci.js --config rgaa.config.json",
+    "test:fixtures": "node --test test/fixtures.test.js",
+    "test:ia": "node --test test/ia-pipeline.test.js test/fixtures-ia.test.js",
     "cypress:open": "cypress open"
   },
   "engines": {

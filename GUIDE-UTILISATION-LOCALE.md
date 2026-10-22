@@ -24,7 +24,7 @@ sudo apt-get install libgtk2.0-0 libgtk-3-0 libgbm-dev libnotify-dev \
 ## 2. Installation (une seule fois)
 
 ```bash
-git clone https://github.com/tgerbeau/accessibility-checker
+git clone https://github.com/IGNF/accessibility-checker
 cd accessibility-checker
 npm install
 ```

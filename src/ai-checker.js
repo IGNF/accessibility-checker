@@ -24,7 +24,9 @@ Signale uniquement des manquements probables aux critères suivants :
 - 8.6 : titre de page (title) non pertinent par rapport au contenu ;
 - 8.7 : passage de texte dans une autre langue que la langue de la page, visiblement non balisé (attribut lang) ;
 - 9.1 : titre de section (h1…h6) non pertinent ou trompeur par rapport à la structure ;
+- 9.2 : structure du document incohérente au vu de la liste des landmarks fournie (en-tête, navigation, contenu principal ou pied de page absent, dupliqué ou imbriqué de façon aberrante) ;
 - 11.2 : étiquette de champ de formulaire non pertinente (ne décrit pas la saisie attendue) ;
+- 11.5 : champs de même nature (mêmes informations, ex. plusieurs radios ou cases d'un même choix, adresse en plusieurs champs) sans regroupement (champ « regroupement » vide) ;
 - 11.9 : intitulé de bouton non pertinent (ne décrit pas l'action).
 Sois conservateur : en cas de doute, ne signale rien.
 ${JSON_FORMAT}`;
@@ -32,7 +34,9 @@ ${JSON_FORMAT}`;
 const VISION_SYSTEM = `Tu es un auditeur expert du RGAA 4.1. On te fournit des images extraites d'une page web, avec leur statut déclaré.
 Signale uniquement des manquements probables aux critères suivants :
 - 1.2 : image déclarée décorative (alt vide, role=presentation ou aria-hidden) alors qu'elle est porteuse d'information ;
-- 1.3 : image informative dont l'alternative textuelle (alt fourni) n'est pas pertinente par rapport au contenu de l'image.
+- 1.3 : image informative dont l'alternative textuelle (alt fourni) n'est pas pertinente par rapport au contenu de l'image ;
+- 1.6 : image complexe (graphique, diagramme, schéma, carte riche en données) dont l'information ne peut tenir dans un alt court, sans description détaillée associée (statut « sans description détaillée ») ;
+- 1.8 : image contenant du texte porteur d'information qui pourrait être rendu en texte stylé (hors logos).
 Sois conservateur : en cas de doute, ne signale rien.
 ${JSON_FORMAT}`;
 
@@ -80,7 +84,10 @@ async function analyzeText(apiKey, model, extracts, usage) {
 async function analyzeImages(apiKey, model, extracts, usage) {
   const items = [
     ...extracts.imagesDecoratives.map((i) => ({ ...i, statut: 'déclarée décorative' })),
-    ...extracts.imagesInformatives.map((i) => ({ ...i, statut: `informative, alt="${i.alt}"` }))
+    ...extracts.imagesInformatives.map((i) => ({
+      ...i,
+      statut: `informative, alt="${i.alt}", ${i.descriptionDetaillee ? 'avec' : 'sans'} description détaillée`
+    }))
   ].slice(0, 10);
   const content = [];
   for (const [idx, item] of items.entries()) {
@@ -93,7 +100,7 @@ async function analyzeImages(apiKey, model, extracts, usage) {
     });
   }
   if (!content.length) return [];
-  content.push({ type: 'text', text: 'Audite ces images au regard des critères 1.2 et 1.3.' });
+  content.push({ type: 'text', text: 'Audite ces images au regard des critères 1.2, 1.3, 1.6 et 1.8.' });
   const answer = await callAnthropic(apiKey, model, VISION_SYSTEM, content, usage);
   return parseFindings(answer);
 }

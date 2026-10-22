@@ -108,7 +108,7 @@ jobs:
   rgaa:
     runs-on: ubuntu-latest
     steps:
-      - uses: tgerbeau/accessibility-checker@v1
+      - uses: IGNF/accessibility-checker@v1
         with:
           urls: https://mon-site.fr https://mon-site.fr/contact
           fail-on: serious
@@ -128,7 +128,7 @@ la version consommée.
 
 - **Exemple prêt à copier** : [.github/workflows/rgaa.yml](.github/workflows/rgaa.yml)
   (utilise l'action sur PR avec commentaire automatique — remplacer `uses: ./` par
-  `uses: tgerbeau/accessibility-checker@v1` dans vos dépôts).
+  `uses: IGNF/accessibility-checker@v1` dans vos dépôts).
 - **GitHub Actions** : [.github/workflows/accessibility.yml](.github/workflows/accessibility.yml)
   (déclenchement sur push/PR, rapports publiés en artefacts).
 - **GitLab CI** : [.gitlab-ci.yml](.gitlab-ci.yml) (image Cypress officielle, artefacts 30 jours).
@@ -149,11 +149,19 @@ Deux niveaux de résultats, pour concilier couverture et fiabilité :
    8.8, 8.9, 9.1–9.3, 10.4, 10.11, 10.12, 11.1, 11.6, 11.13, 12.6, 12.7, 13.1, 13.8.
 2. **Signalements « à vérifier » (jamais bloquants)** — détections demandant une confirmation
    humaine :
-   - heuristiques : focus visible (10.7), piège clavier (12.9), systèmes de navigation (12.1)
-     et cohérence des menus entre pages (12.2) ;
+   - heuristiques : médias temporels (4.1), couleurs de fond (10.5), focus visible (10.7),
+     systèmes de navigation (12.1) et cohérence des menus entre pages (12.2), lien
+     d'évitement (12.7), tabindex positifs (12.8), piège clavier (12.9), documents
+     bureautiques en téléchargement (13.3), contrastes indéterminables par axe — fond
+     d'image, dégradé… (3.2) ;
+   - règles axe expérimentales (titre de tableau 5.4, en-têtes de cellules 5.7, paragraphe
+     stylé en titre 9.1, étiquette visible ≠ nom accessible 11.2, orientation
+     verrouillée 13.9) ;
    - IA (option `--ai`, API Anthropic) : pertinence des alternatives d'images (1.2, 1.3),
-     liens explicites (6.1), titre de page (8.6), changements de langue (8.7), pertinence
-     des titres (9.1), étiquettes (11.2) et intitulés de bouton (11.9).
+     description détaillée des images complexes (1.6), images-texte (1.8), liens
+     explicites (6.1), titre de page (8.6), changements de langue (8.7), pertinence des
+     titres (9.1), cohérence des landmarks (9.2), étiquettes (11.2), regroupements de
+     champs (11.5) et intitulés de bouton (11.9).
 
 Le rapport affiche la couverture effective (critères testés / 106). Les signalements IA
 peuvent comporter des faux positifs : ils alimentent une revue humaine, pas une déclaration

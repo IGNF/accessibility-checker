@@ -19,9 +19,8 @@ export const AXE_TO_RGAA = {
   'svg-img-alt':          { rgaa: ['1.1'], theme: 'Images' },
   'role-img-alt':         { rgaa: ['1.1'], theme: 'Images' },
 
-  // Thématique 2 — Cadres
+  // Thématique 2 — Cadres (2.2 : via AXE_REVIEW_RULES, axe ne produit jamais de violation)
   'frame-title':          { rgaa: ['2.1'], theme: 'Cadres' },
-  'frame-title-unique':   { rgaa: ['2.2'], theme: 'Cadres' },
 
   // Thématique 3 — Couleurs (3.3 exclu : axe ne teste que le contraste du texte, pas des composants)
   'color-contrast':       { rgaa: ['3.2'], theme: 'Couleurs' },
@@ -29,6 +28,7 @@ export const AXE_TO_RGAA = {
 
   // Thématique 4 — Multimédia
   'video-caption':        { rgaa: ['4.3'], theme: 'Multimédia' },
+  'audio-caption':        { rgaa: ['4.3'], theme: 'Multimédia' },   // 4.3.1 : média temporel sans sous-titres synchronisés
   'no-autoplay-audio':    { rgaa: ['4.10'], theme: 'Multimédia' },
 
   // Thématique 5 — Tableaux
@@ -40,6 +40,11 @@ export const AXE_TO_RGAA = {
 
   // Thématique 7 — Scripts
   'button-name':          { rgaa: ['7.1'], theme: 'Scripts' },
+  'input-button-name':    { rgaa: ['7.1'], theme: 'Scripts' },      // 7.1.1 : bouton <input> sans nom accessible
+  'summary-name':         { rgaa: ['7.1'], theme: 'Scripts' },      // 7.1.1 : <summary> sans nom accessible
+  'aria-tab-name':        { rgaa: ['7.1'], theme: 'Scripts' },      // 7.1.3 : onglet ARIA sans nom accessible
+  'aria-meter-name':      { rgaa: ['7.1'], theme: 'Scripts' },      // 7.1.3 : composant meter sans nom accessible
+  'aria-progressbar-name': { rgaa: ['7.1'], theme: 'Scripts' },     // 7.1.3 : barre de progression sans nom accessible
   'nested-interactive':   { rgaa: ['7.1'], theme: 'Scripts' },
   'aria-command-name':    { rgaa: ['7.1'], theme: 'Scripts' },
   'aria-toggle-field-name': { rgaa: ['7.1'], theme: 'Scripts' },
@@ -60,6 +65,8 @@ export const AXE_TO_RGAA = {
   'aria-conditional-attr': { rgaa: ['8.2'], theme: 'Éléments obligatoires' },
   'aria-deprecated-role': { rgaa: ['8.2'], theme: 'Éléments obligatoires' },
   'aria-prohibited-attr': { rgaa: ['8.2'], theme: 'Éléments obligatoires' },
+  'aria-roledescription': { rgaa: ['8.2'], theme: 'Éléments obligatoires' }, // 8.2.1 : aria-roledescription hors rôle valide
+  'aria-braille-equivalent': { rgaa: ['8.2'], theme: 'Éléments obligatoires' }, // 8.2.1 : équivalent braille sans alternative standard
 
   // Thématique 8 — Éléments obligatoires
   'document-title':       { rgaa: ['8.5'], theme: 'Éléments obligatoires' },
@@ -87,8 +94,8 @@ export const AXE_TO_RGAA = {
   'form-field-multiple-labels': { rgaa: ['11.1'], theme: 'Formulaires' },
   'autocomplete-valid':   { rgaa: ['11.13'], theme: 'Formulaires' },
 
-  // Thématique 12 — Navigation (12.8 exclu : cohérence de l'ordre de tabulation = jugement humain)
-  'bypass':               { rgaa: ['12.7'], theme: 'Navigation' },
+  // Thématique 12 — Navigation (12.8 exclu : cohérence de l'ordre de tabulation = jugement
+  // humain ; 12.7 : via AXE_REVIEW_RULES, axe ne produit jamais de violation)
 
   // Thématique 13 — Consultation
   'blink':                { rgaa: ['13.8'], theme: 'Consultation' },
@@ -122,11 +129,43 @@ export const BEST_PRACTICE_RULES = [
   'region'
 ];
 
+/**
+ * Règles axe « reviewOnFail » : en cas d'échec, axe les classe en `incomplete`,
+ * jamais en violation. Elles alimentent donc le tier « à vérifier » (signalements
+ * non bloquants), pas les violations.
+ */
+export const AXE_REVIEW_RULES = {
+  'bypass':             { rgaa: ['12.7'], theme: 'Navigation' },
+  'frame-title-unique': { rgaa: ['2.2'], theme: 'Cadres' }
+};
+
+/**
+ * Règles axe dont le classement en `incomplete` mérite un signalement : axe n'a
+ * pas pu conclure (ex. contraste sur fond d'image ou dégradé) mais un auditeur
+ * humain doit vérifier. Jamais bloquant.
+ */
+export const AXE_INCOMPLETE_RULES = {
+  'color-contrast': { rgaa: ['3.2'], theme: 'Couleurs' }
+};
+
+/**
+ * Règles axe expérimentales : activées explicitement, mais leur fiabilité ne
+ * permet pas d'en faire des violations bloquantes → leurs échecs (violations
+ * comme incomplete) alimentent le tier « à vérifier ».
+ */
+export const AXE_EXPERIMENTAL_RULES = {
+  'table-fake-caption':          { rgaa: ['5.4'], theme: 'Tableaux' },      // 5.4.1 : titre de tableau non associé (caption)
+  'td-has-header':               { rgaa: ['5.7'], theme: 'Tableaux' },      // 5.7 : cellules sans en-tête associé
+  'p-as-heading':                { rgaa: ['9.1'], theme: 'Structuration' }, // 9.1 : paragraphe stylé utilisé comme titre
+  'label-content-name-mismatch': { rgaa: ['11.2'], theme: 'Formulaires' },  // 11.2.5 : nom accessible ≠ étiquette visible
+  'css-orientation-lock':        { rgaa: ['13.9'], theme: 'Consultation' }  // 13.9.1 : orientation verrouillée par CSS
+};
+
 /** Critères couverts par des signalements heuristiques « à vérifier » (jamais bloquants). */
-export const HEURISTIC_CRITERIA = ['10.7', '12.1', '12.2', '12.9'];
+export const HEURISTIC_CRITERIA = ['4.1', '10.5', '10.7', '12.1', '12.2', '12.8', '12.9', '13.3'];
 
 /** Critères couverts par les signalements IA « à vérifier » (option --ai). */
-export const AI_CRITERIA = ['1.2', '1.3', '6.1', '8.6', '8.7', '9.1', '11.2', '11.9'];
+export const AI_CRITERIA = ['1.2', '1.3', '1.6', '1.8', '6.1', '8.6', '8.7', '9.1', '9.2', '11.2', '11.5', '11.9'];
 
 const THEME_BY_SECTION = {
   1: 'Images', 2: 'Cadres', 3: 'Couleurs', 4: 'Multimédia', 5: 'Tableaux',
@@ -142,7 +181,12 @@ export function themeOf(critere) {
 /** Couverture du référentiel : critères testés automatiquement / signalés « à vérifier ». */
 export function coveredCriteria({ ai = false } = {}) {
   const auto = [...new Set(Object.values(AXE_TO_RGAA).flatMap((e) => e.rgaa))];
-  const review = [...new Set([...HEURISTIC_CRITERIA, ...(ai ? AI_CRITERIA : [])])]
+  const axeReview = [
+    ...Object.values(AXE_REVIEW_RULES),
+    ...Object.values(AXE_INCOMPLETE_RULES),
+    ...Object.values(AXE_EXPERIMENTAL_RULES)
+  ].flatMap((e) => e.rgaa);
+  const review = [...new Set([...HEURISTIC_CRITERIA, ...axeReview, ...(ai ? AI_CRITERIA : [])])]
     .filter((c) => !auto.includes(c));
   const byNum = (a, b) => {
     const [ta, ca] = a.split('.').map(Number);

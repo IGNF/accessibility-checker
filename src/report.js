@@ -13,7 +13,7 @@ function esc(s) {
     .replaceAll('"', '&quot;');
 }
 
-const SOURCE_LABELS = { heuristique: 'Heuristique', ia: 'IA' };
+const SOURCE_LABELS = { heuristique: 'Heuristique', ia: 'IA', axe: 'axe-core' };
 
 function findingsTable(findings, caption) {
   if (!findings?.length) return '';
@@ -129,6 +129,7 @@ Un audit manuel reste indispensable pour une déclaration de conformité.</em></
   .source { padding: .15rem .5rem; border-radius: .25rem; font-weight: bold; white-space: nowrap; }
   .source-heuristique { background: #e8edff; color: #000091; }
   .source-ia { background: #feebcb; color: #6e445a; }
+  .source-axe { background: #e3f3e3; color: #18753c; }
   .kpi { display: inline-block; margin-right: 2rem; }
   .kpi strong { font-size: 1.5rem; display: block; }
 </style>
