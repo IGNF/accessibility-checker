@@ -23,7 +23,7 @@ function findingsTable(findings, caption) {
         <td>${esc(f.theme)}</td>
         <td><span class="source source-${esc(f.source)}">${esc(SOURCE_LABELS[f.source] ?? f.source)}</span>${typeof f.confidence === 'number' ? ` (${Math.round(f.confidence * 100)} %)` : ''}</td>
         <td><code>${esc(f.target)}</code></td>
-        <td>${esc(f.message)}</td>
+        <td>${esc(f.message)}${f.state ? ` <span class="state">${esc(f.state)}</span>` : ''}</td>
       </tr>`).join('');
   return `
       <table>
@@ -53,21 +53,28 @@ export function buildHtmlReport(summary) {
         <td><span class="impact impact-${esc(v.impact)}">${esc(IMPACT_LABELS[v.impact] ?? v.impact)}</span></td>
         <td>${v.nodeCount}</td>
         <td>
-          ${esc(v.help)}
+          ${esc(v.help)}${v.state ? ` <span class="state">${esc(v.state)}</span>` : ''}
+          ${v.impact === 'critical' ? `
           <details>
             <summary>Détails (${v.nodes.length} exemple(s))</summary>
             <ul>
               ${v.nodes.map((n) => `<li><code>${esc(n.target)}</code><pre>${esc(n.html)}</pre></li>`).join('')}
             </ul>
             <p><a href="${esc(v.helpUrl)}" rel="noopener noreferrer">Documentation de la règle</a></p>
-          </details>
+          </details>` : ''}
         </td>
       </tr>`).join('');
+
+    const inter = p.interactions;
+    const interHtml = inter
+      ? `<p class="interactions">Scénarios d'interaction : ${(inter.disclosures ?? []).length} contenu(s) dépliable(s) et ${(inter.modals ?? []).length} modale(s) ouverts puis réanalysés${(inter.disclosures ?? []).length + (inter.modals ?? []).length ? ` (${esc([...(inter.disclosures ?? []), ...(inter.modals ?? [])].slice(0, 12).join(' · '))}${(inter.disclosures ?? []).length + (inter.modals ?? []).length > 12 ? ' …' : ''})` : ''}${inter.menu320?.length ? ` ; à 320 px, menu ouvert via ${esc(inter.menu320.join(' · '))}` : ''}.${inter.aborted ? ` <strong>Interrompus :</strong> ${esc(inter.aborted)}.` : ''}</p>`
+      : '';
 
     return `
     <section aria-labelledby="page-${esc(encodeURIComponent(p.url))}">
       <h2 id="page-${esc(encodeURIComponent(p.url))}">${esc(p.url)}</h2>
       <p>${p.violations.length} règle(s) en échec — ${p.passesCount} règle(s) conformes — ${p.incompleteCount} à vérifier manuellement.</p>
+      ${interHtml}
       ${p.violations.length ? `
       <table>
         <caption>Violations détectées sur ${esc(p.url)}</caption>
@@ -107,6 +114,10 @@ Un audit manuel reste indispensable pour une déclaration de conformité.</em></
 <p><em>Avertissement : ces tests automatiques ne couvrent qu'une partie des critères RGAA.
 Un audit manuel reste indispensable pour une déclaration de conformité.</em></p>`;
 
+  const u = summary.aiUsage;
+  const aiUsageHtml = u?.calls ? `
+<p><em>Coût du tier IA : ${u.calls} appel(s) au modèle ${esc(u.model)}, ${u.inputTokens.toLocaleString('fr-FR')} tokens en entrée + ${u.outputTokens.toLocaleString('fr-FR')} en sortie${u.estimatedCostUsd == null ? '' : `, soit environ <strong>${u.estimatedCostUsd.toFixed(3)} $</strong> pour ce rapport (tarif indicatif)`}.</em></p>` : '';
+
   return `<!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -130,6 +141,8 @@ Un audit manuel reste indispensable pour une déclaration de conformité.</em></
   .source-heuristique { background: #e8edff; color: #000091; }
   .source-ia { background: #feebcb; color: #6e445a; }
   .source-axe { background: #e3f3e3; color: #18753c; }
+  .state { display: inline-block; margin-left: .25rem; padding: .1rem .4rem; border-radius: .25rem; background: #fef3e0; color: #7a4d00; font-size: .85em; }
+  .interactions { color: #444; font-size: .9em; }
   .kpi { display: inline-block; margin-right: 2rem; }
   .kpi strong { font-size: 1.5rem; display: block; }
 </style>
@@ -138,6 +151,7 @@ Un audit manuel reste indispensable pour une déclaration de conformité.</em></
 <h1>Rapport d'accessibilité RGAA</h1>
 <p>Référentiel : ${esc(summary.referential)} — Généré le ${esc(new Date(summary.date).toLocaleString('fr-FR'))}</p>
 ${coverageHtml}
+${aiUsageHtml}
 <section aria-labelledby="titre-synthese">
   <h2 id="titre-synthese">Synthèse</h2>
   <p>

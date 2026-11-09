@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fixture RGAA 10.11 — défilement horizontal à 320 px, menu ouvert</title>
+  <style>
+    body { margin: 0; }
+    /* Au chargement, la page tient dans 320 px : le menu est replié derrière un bouton. */
+    #menu-btn { display: none; }
+    #menu[hidden] { display: none; }
+    @media (max-width: 767px) {
+      #menu-btn { display: inline-block; }
+      /* Sous-menu à largeur fixe : déborde du viewport une fois le menu ouvert */
+      #menu ul { width: 480px; margin: 0; padding: 0; list-style: none; display: flex; gap: 1rem; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <p>Démonstrateur rgaa-ci</p>
+    <button type="button" id="menu-btn" aria-expanded="false" aria-controls="menu">Menu</button>
+    <nav id="menu" aria-label="Menu principal">
+      <ul>
+        <li><a href="#a">Aide</a></li>
+        <li><a href="#b">Services</a></li>
+        <li><a href="#c">Mon espace</a></li>
+      </ul>
+    </nav>
+  </header>
+  <main>
+    <h1>Menu replié à 320 px</h1>
+    <p>Le défilement horizontal n'apparaît qu'une fois le menu ouvert sur petit écran.</p>
+  </main>
+  <footer><p>Pied de page</p></footer>
+  <script>
+    const btn = document.getElementById('menu-btn');
+    const menu = document.getElementById('menu');
+    const mq = window.matchMedia('(max-width: 767px)');
+    function appliquer() {
+      if (mq.matches) {
+        menu.hidden = btn.getAttribute('aria-expanded') !== 'true';
+      } else {
+        menu.hidden = false;
+      }
+    }
+    btn.addEventListener('click', () => {
+      btn.setAttribute('aria-expanded', String(btn.getAttribute('aria-expanded') !== 'true'));
+      appliquer();
+    });
+    mq.addEventListener('change', appliquer);
+    appliquer();
+  </script>
+</body>
+</html>

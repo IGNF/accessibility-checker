@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>Fixture RGAA 11.1 — champ sans étiquette dans un panneau dépliable</title>
+  <style>
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <header><p>Démonstrateur rgaa-ci</p></header>
+  <main>
+    <h1>Panneau ouvert par interaction</h1>
+    <p>Le champ sans étiquette n'apparaît qu'après ouverture du panneau (masqué au chargement, donc ignoré par axe-core).</p>
+    <button type="button" aria-expanded="false" aria-controls="panneau" id="deplier">Affiner la recherche</button>
+    <div id="panneau" hidden>
+      <form action="#" onsubmit="return false">
+        <input type="text" name="mot-cle">
+      </form>
+    </div>
+  </main>
+  <footer><p>Pied de page</p></footer>
+  <script>
+    const btn = document.getElementById('deplier');
+    const panneau = document.getElementById('panneau');
+    btn.addEventListener('click', () => {
+      const ouvert = btn.getAttribute('aria-expanded') === 'true';
+      btn.setAttribute('aria-expanded', String(!ouvert));
+      panneau.hidden = ouvert;
+    });
+  </script>
+</body>
+</html>

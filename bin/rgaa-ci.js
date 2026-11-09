@@ -34,6 +34,11 @@ Options :
                          Jamais bloquant pour la CI.
   --ai-model <nom>       Modèle Anthropic à utiliser (défaut : claude-haiku-4-5)
   --ai-max-items <n>     Nombre max d'éléments soumis à l'IA par page (défaut : 20)
+  --login-origin <url>   Origine du formulaire de connexion (SSO Keycloak…) vers lequel
+                         les pages redirigent, ex. https://sso.example.org. Les identifiants
+                         sont lus dans RGAA_LOGIN_USER et RGAA_LOGIN_PASSWORD (jamais en CLI).
+  --no-interactions      Désactiver les scénarios d'interaction génériques (ouverture des
+                         menus, dépliables et modales avant réanalyse ; menu ouvert à 320 px).
   --no-html              Ne pas générer le rapport HTML
   --quiet                Sortie console minimale
   --help                 Affiche cette aide
@@ -62,6 +67,8 @@ function parseArgs(argv) {
       case '--ai': args.ai = true; break;
       case '--ai-model': args.aiModel = argv[++i]; break;
       case '--ai-max-items': args.aiMaxItems = Number(argv[++i]); break;
+      case '--login-origin': args.loginOrigin = argv[++i]; break;
+      case '--no-interactions': args.interactions = false; break;
       case '--no-html': args.html = false; break;
       case '--quiet': args.quiet = true; break;
       case '--help': case '-h': printHelp(); process.exit(0); break;
@@ -103,8 +110,19 @@ function loadConfig(args) {
     quiet: args.quiet || (fileConf.quiet ?? false),
     ignoreRules: fileConf.ignoreRules ?? [],
     waitAfterLoad: fileConf.waitAfterLoad ?? 1000,
+    interactions: args.interactions ?? fileConf.interactions ?? true,
     httpHeaders: fileConf.httpHeaders ?? {},
     basicAuth: fileConf.basicAuth ?? null,
+    // Connexion via un formulaire sur une autre origine (SSO) ; sélecteurs par défaut = Keycloak
+    login: (args.loginOrigin ?? fileConf.login?.origin)
+      ? {
+          origin: args.loginOrigin ?? fileConf.login.origin,
+          // name="username"/"password" est stable sur Keycloak, l'id varie selon le thème (ex. DSFR : id généré)
+          usernameSelector: fileConf.login?.usernameSelector ?? 'input[name="username"], #username',
+          passwordSelector: fileConf.login?.passwordSelector ?? 'input[name="password"], #password',
+          submitSelector: fileConf.login?.submitSelector ?? 'button[type="submit"], input[type="submit"]'
+        }
+      : null,
     ai: {
       enabled: args.ai ?? fileConf.ai?.enabled ?? false,
       model: args.aiModel ?? fileConf.ai?.model ?? null,
@@ -127,6 +145,17 @@ function loadConfig(args) {
   if (conf.ai.enabled && !process.env.ANTHROPIC_API_KEY) {
     console.error('--ai nécessite la variable d\'environnement ANTHROPIC_API_KEY (ne mettez jamais la clé dans un fichier versionné).');
     process.exit(2);
+  }
+
+  if (conf.login) {
+    if (!/^https?:\/\/[^/]+$/.test(conf.login.origin)) {
+      console.error('--login-origin doit être une origine sans chemin, ex. https://sso.example.org');
+      process.exit(2);
+    }
+    if (!process.env.RGAA_LOGIN_USER || !process.env.RGAA_LOGIN_PASSWORD) {
+      console.error('La connexion SSO nécessite les variables d\'environnement RGAA_LOGIN_USER et RGAA_LOGIN_PASSWORD (jamais dans un fichier versionné).');
+      process.exit(2);
+    }
   }
 
   const m = /^(\d+)x(\d+)$/.exec(conf.viewport);

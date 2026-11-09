@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>Fixture RGAA 7.1 — bouton sans nom dans une modale</title>
+  <style>
+    dialog:not([open]) { display: none; }
+  </style>
+</head>
+<body>
+  <header><p>Démonstrateur rgaa-ci</p></header>
+  <main>
+    <h1>Modale ouverte par interaction</h1>
+    <p>Le bouton sans intitulé n'est présent qu'à l'intérieur de la modale, masquée au chargement.</p>
+    <button type="button" aria-haspopup="dialog" aria-controls="dlg" id="ouvrir">Ouvrir les paramètres</button>
+    <dialog id="dlg" aria-labelledby="dlg-titre">
+      <h2 id="dlg-titre">Paramètres</h2>
+      <button type="button" aria-label="Fermer" id="fermer">×</button>
+      <p>Contenu de la modale.</p>
+      <button type="button"></button>
+    </dialog>
+  </main>
+  <footer><p>Pied de page</p></footer>
+  <script>
+    const dlg = document.getElementById('dlg');
+    document.getElementById('ouvrir').addEventListener('click', () => dlg.showModal());
+    document.getElementById('fermer').addEventListener('click', () => dlg.close());
+  </script>
+</body>
+</html>

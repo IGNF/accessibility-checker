@@ -12,10 +12,15 @@
  *
  * Critères couverts par le mapping mais sans fixture : 4.3 et 4.10 (multimédia) —
  * axe-core classe ces cas en « incomplete », pas en violation déterministe.
+ *
+ * Les fixtures « …-dans-modale », « …-dans-panneau » et « …-menu-ouvert-320 »
+ * exercent les scénarios d'interaction génériques : le défaut n'existe (ou n'est
+ * visible) qu'après ouverture d'une modale, d'un dépliable ou du menu à 320 px.
  */
 export const FIXTURES = {
   'page-saine.html': { criteres: [] },
   '1.1-image-sans-alternative.html': { criteres: ['1.1'] },
+  '1.9-legende-non-liee.html': { criteres: [], signalements: ['1.9'] },
   '2.1-cadre-sans-titre.html': { criteres: ['2.1'] },
   '2.2-cadres-titres-identiques.html': { criteres: [], signalements: ['2.2'] },
   '3.1-lien-couleur-seule.html': { criteres: ['3.1'] },
@@ -23,6 +28,7 @@ export const FIXTURES = {
   '5.7-entetes-tableau.html': { criteres: ['5.7'] },
   '6.2-lien-sans-intitule.html': { criteres: ['6.2'] },
   '7.1-bouton-sans-nom.html': { criteres: ['7.1'] },
+  '7.1-bouton-sans-nom-dans-modale.html': { criteres: ['7.1'] },
   '7.3-zone-defilante-non-focusable.html': { criteres: ['7.3'] },
   '8.1-doctype-absent.html': { criteres: ['8.1'] },
   '8.2-aria-invalide.html': { criteres: ['8.2'] },
@@ -35,10 +41,14 @@ export const FIXTURES = {
   '9.2-structure-sans-main.html': { criteres: ['9.2'] },
   '9.3-liste-mal-formee.html': { criteres: ['9.3'] },
   '10.4-zoom-bloque.html': { criteres: ['10.4'] },
+  '10.6-lien-couleur-seule.html': { criteres: [], signalements: ['10.6'] },
   '10.11-defilement-horizontal.html': { criteres: ['10.11'] },
+  '10.11-menu-ouvert-320.html': { criteres: ['10.11'] },
   '10.12-espacement-impose.html': { criteres: ['10.12'] },
   '11.1-champ-sans-etiquette.html': { criteres: ['11.1'] },
+  '11.1-champ-sans-etiquette-dans-panneau.html': { criteres: ['11.1'] },
   '11.6-fieldset-sans-legende.html': { criteres: ['11.6'] },
+  '11.10-obligatoire-non-indique.html': { criteres: [], signalements: ['11.10'] },
   '11.13-autocomplete-invalide.html': { criteres: ['11.13'] },
   '12.6-contenu-hors-zones.html': { criteres: ['12.6'] },
   '12.7-aucun-moyen-eviter.html': { criteres: [], signalements: ['12.7'] },

@@ -3,7 +3,7 @@
 Outil en ligne de commande qui exécute les tests d'accessibilité **automatisables du RGAA 4.1**
 sur une liste de pages web, et fait échouer le pipeline CI en cas de violations.
 En complément des tests déterministes (~30 critères), un tier optionnel de **signalements
-« à vérifier »** (heuristiques et IA) étend la couverture à une quarantaine de critères,
+« à vérifier »** (heuristiques et IA) étend la couverture à la moitié des critères (54/106),
 sans jamais faire échouer la CI.
 
 Il s'appuie sur [axe-core](https://github.com/dequelabs/axe-core) (moteur de référence,
@@ -52,8 +52,29 @@ node bin/rgaa-ci.js --config rgaa.config.json
 | `--ai` | Active les signalements IA « à vérifier » (nécessite `ANTHROPIC_API_KEY`) | désactivé |
 | `--ai-model <nom>` | Modèle Anthropic utilisé | `claude-haiku-4-5` |
 | `--ai-max-items <n>` | Éléments max soumis à l'IA par page | `20` |
+| `--no-interactions` | Désactive les scénarios d'interaction génériques (voir ci-dessous) | activés |
 | `--no-html` | Désactive le rapport HTML | — |
 | `--quiet` | Sortie console minimale | — |
+
+### Scénarios d'interaction
+
+Une part importante des non-conformités relevées en audit manuel se trouve dans des
+contenus masqués au chargement : menus, accordéons, panneaux, modales. Après l'analyse
+de la page telle que chargée, l'outil :
+
+1. ouvre les **contenus dépliables** détectés par leur sémantique (`aria-expanded="false"`,
+   `<details>` fermé, `aria-controls` vers une cible masquée) puis réanalyse la page ;
+2. ouvre **chaque modale** (`aria-haspopup="dialog"`, `data-fr-opened` du DSFR,
+   `aria-controls` vers un `role="dialog"`) une à une, l'analyse, puis la ferme ;
+3. à 320 px de large, ouvre le **menu** de l'en-tête et ses sous-menus avant de
+   revérifier l'absence de défilement horizontal (critère 10.11).
+
+Aucun sélecteur propre à un site n'est utilisé ; les liens et boutons de soumission ne
+sont jamais activés, et toute navigation hors de la page interrompt la passe. Seules les
+occurrences **nouvelles** sont ajoutées au rapport, annotées de l'état qui les a révélées
+(ex. « après ouverture de la modale « Paramètres d'affichage » »). Limites : 20 dépliables
+et 5 modales par page. Désactivable avec `--no-interactions` ou `"interactions": false`
+dans la configuration.
 
 ### Fichier de configuration
 
@@ -149,8 +170,9 @@ Deux niveaux de résultats, pour concilier couverture et fiabilité :
    8.8, 8.9, 9.1–9.3, 10.4, 10.11, 10.12, 11.1, 11.6, 11.13, 12.6, 12.7, 13.1, 13.8.
 2. **Signalements « à vérifier » (jamais bloquants)** — détections demandant une confirmation
    humaine :
-   - heuristiques : médias temporels (4.1), couleurs de fond (10.5), focus visible (10.7),
-     systèmes de navigation (12.1) et cohérence des menus entre pages (12.2), lien
+   - heuristiques : images légendées (1.9), médias temporels (4.1), couleurs de fond (10.5),
+     liens signalés par la seule couleur (10.6), focus visible (10.7), champs obligatoires
+     non indiqués (11.10), systèmes de navigation (12.1) et cohérence des menus entre pages (12.2), lien
      d'évitement (12.7), tabindex positifs (12.8), piège clavier (12.9), documents
      bureautiques en téléchargement (13.3), contrastes indéterminables par axe — fond
      d'image, dégradé… (3.2) ;

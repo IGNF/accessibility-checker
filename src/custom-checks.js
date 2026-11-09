@@ -101,11 +101,16 @@ export function checkReflow(win) {
   const doc = win.document;
   const de = doc.documentElement;
   const width = de.clientWidth;
-  if (de.scrollWidth <= width + 16) return null;
+  // Le débordement d'une boîte de dialogue ouverte (menu mobile, modale) n'est pas
+  // reflété par documentElement.scrollWidth : on examine aussi ces conteneurs.
+  const roots = [de, doc.body, ...doc.querySelectorAll('dialog[open], [role="dialog"], .fr-modal--opened')]
+    .filter((el) => el && (el === de || isVisible(el)));
+  const scrollWidth = Math.max(...roots.map((el) => el.scrollWidth));
+  if (scrollWidth <= width + 16) return null;
 
   const offenders = [];
   for (const el of doc.body.querySelectorAll('*')) {
-    if (el.getBoundingClientRect().right > width + 16) {
+    if (isVisible(el) && el.getBoundingClientRect().right > width + 16) {
       offenders.push(el);
       if (offenders.length >= 5) break;
     }
@@ -113,7 +118,7 @@ export function checkReflow(win) {
 
   const wideException = Array.from(doc.querySelectorAll(REFLOW_EXCEPTIONS))
     .some((el) => el.getBoundingClientRect().width > width);
-  const detail = `largeur de contenu ${de.scrollWidth}px pour un viewport de ${width}px`;
+  const detail = `largeur de contenu ${scrollWidth}px pour un viewport de ${width}px`;
 
   if (wideException) {
     return {
@@ -140,10 +145,13 @@ export function checkReflow(win) {
   };
 }
 
-/** Signalements heuristiques « à vérifier » : 4.1, 10.5, 10.7, 12.7, 12.8, 12.9 et 13.3. */
+/** Signalements heuristiques « à vérifier » : 1.9, 4.1, 10.5, 10.6, 10.7, 11.10, 12.7, 12.8, 12.9 et 13.3. */
 export function collectFindings(win) {
   return [
+    ...scanCaptionedImages(win),
     ...scanFocusSuppression(win),
+    ...scanColorOnlyLinks(win),
+    ...scanRequiredIndication(win),
     ...scanTabBlocking(win),
     ...scanSkipLink(win),
     ...scanPositiveTabindex(win),
@@ -151,6 +159,73 @@ export function collectFindings(win) {
     ...scanMultimedia(win),
     ...scanDefaultBackground(win)
   ];
+}
+
+// RGAA 1.9 (test 1.9.1) : image légendée = <figure role="group"> dont l'aria-label reprend la <figcaption>
+function scanCaptionedImages(win) {
+  const norm = (s) => (s ?? '').replace(/\s+/g, ' ').trim();
+  const offenders = Array.from(win.document.querySelectorAll('figure')).filter((fig) => {
+    const caption = fig.querySelector(':scope > figcaption');
+    if (!caption || !fig.querySelector('img, svg, canvas, picture, [role="img"]')) return false;
+    return fig.getAttribute('role') !== 'group' || norm(fig.getAttribute('aria-label')) !== norm(caption.textContent);
+  });
+  if (!offenders.length) return [];
+  return [{
+    criterion: '1.9',
+    theme: 'Images',
+    source: 'heuristique',
+    target: offenders.slice(0, 5).map(cssPath).join(' ; '),
+    message: `${offenders.length} image(s) légendée(s) (<figure> + <figcaption>) sans role="group" ou dont l'aria-label ne reprend pas la légende. Vérifier que la légende est correctement liée à l'image (RGAA 1.9).`
+  }];
+}
+
+// RGAA 10.6 (test 10.6.1) : lien texte dans un bloc de texte signalé uniquement par la couleur
+function scanColorOnlyLinks(win) {
+  const doc = win.document;
+  const style = (el) => win.getComputedStyle(el);
+  const hasOwnText = (block, a) => Array.from(block.childNodes)
+    .some((n) => n.nodeType === 3 && n.textContent.trim().length > 1 && !a.contains(n));
+  const offenders = [];
+  for (const a of Array.from(doc.querySelectorAll('p a[href], li a[href], td a[href], dd a[href]'))) {
+    const block = a.closest('p, li, td, dd');
+    if (!block || !isVisible(a) || !a.textContent.trim() || !hasOwnText(block, a)) continue;
+    if (a.querySelector('img, svg')) continue;
+    const sa = style(a); const sb = style(block);
+    const decorated = ['text-decoration-line', 'border-bottom-style', 'outline-style']
+      .some((p) => !['none', ''].includes(sa.getPropertyValue(p)));
+    const otherCue = sa.fontWeight !== sb.fontWeight || sa.fontStyle !== sb.fontStyle ||
+      sa.backgroundColor !== sb.backgroundColor || sa.textTransform !== sb.textTransform;
+    if (!decorated && !otherCue && sa.color !== sb.color) offenders.push(a);
+    if (offenders.length >= 20) break;
+  }
+  if (!offenders.length) return [];
+  return [{
+    criterion: '10.6',
+    theme: 'Présentation',
+    source: 'heuristique',
+    target: offenders.slice(0, 5).map(cssPath).join(' ; '),
+    message: `${offenders.length} lien(s) dans un bloc de texte ne se distinguent du texte environnant que par la couleur (ni soulignement, ni graisse, ni bordure). Vérifier qu'un indice autre que la couleur existe (RGAA 10.6).`
+  }];
+}
+
+// RGAA 11.10 (test 11.10.1) : champs obligatoires sans indication visible du caractère obligatoire
+function scanRequiredIndication(win) {
+  const offenders = [];
+  for (const form of Array.from(win.document.querySelectorAll('form'))) {
+    const required = Array.from(form.querySelectorAll('[required], [aria-required="true"]')).filter(isVisible);
+    if (!required.length) continue;
+    const texte = `${form.textContent} ${Array.from(form.querySelectorAll('[placeholder], [title]'))
+      .map((el) => `${el.getAttribute('placeholder')} ${el.getAttribute('title')}`).join(' ')}`;
+    if (!/\*|obligatoire|requis|required|mandatory/i.test(texte)) offenders.push(form);
+  }
+  if (!offenders.length) return [];
+  return [{
+    criterion: '11.10',
+    theme: 'Formulaires',
+    source: 'heuristique',
+    target: offenders.slice(0, 5).map(cssPath).join(' ; '),
+    message: `${offenders.length} formulaire(s) comportent des champs obligatoires (required / aria-required) sans indication textuelle visible du caractère obligatoire (astérisque, mention « obligatoire »…). Vérifier l'aide à la saisie (RGAA 11.10).`
+  }];
 }
 
 // RGAA 4.1 : présence de médias temporels → transcription/sous-titres/audiodescription à vérifier

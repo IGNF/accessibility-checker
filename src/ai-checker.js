@@ -11,6 +11,18 @@ import { AI_CRITERIA, themeOf } from './rgaa-mapping.js';
 const API_URL = 'https://api.anthropic.com/v1/messages';
 const API_VERSION = '2023-06-01';
 export const DEFAULT_MODEL = 'claude-haiku-4-5';
+// Tarif indicatif ($ par million de tokens) pour l'estimation de coût affichée dans les rapports
+const PRICING = {
+  'claude-haiku-4-5': { input: 1, output: 5 },
+  'claude-sonnet-4-5': { input: 3, output: 15 }
+};
+
+/** Coût estimé en dollars d'une consommation { model, inputTokens, outputTokens } (null si tarif inconnu). */
+export function estimateCost(usage) {
+  const p = PRICING[usage?.model];
+  if (!p) return null;
+  return (usage.inputTokens * p.input + usage.outputTokens * p.output) / 1e6;
+}
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
 
@@ -43,7 +55,7 @@ ${JSON_FORMAT}`;
 /**
  * Analyse les pages (mutées en place) : ajoute les signalements IA dans
  * page.findings et supprime les extraits de transport page.aiExtracts.
- * Retourne la consommation de tokens cumulée { model, calls, inputTokens, outputTokens }.
+ * Retourne la consommation de tokens cumulée { model, calls, inputTokens, outputTokens, estimatedCostUsd }.
  */
 export async function runAiChecks(pages, conf, log = console) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -68,6 +80,7 @@ export async function runAiChecks(pages, conf, log = console) {
     page.findings = [...(page.findings ?? []), ...findings];
     delete page.aiExtracts;
   }
+  usage.estimatedCostUsd = estimateCost(usage);
   return usage;
 }
 

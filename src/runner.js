@@ -27,6 +27,12 @@ export async function runAudit(conf) {
 
   if (!conf.quiet) console.log(`▶ Audit Cypress de ${conf.urls.length} page(s) …`);
 
+  // Identifiants SSO transmis par l'environnement hérité (préfixe CYPRESS_), pas en argument de ligne de commande
+  if (conf.login) {
+    process.env.CYPRESS_RGAA_LOGIN_USER = process.env.RGAA_LOGIN_USER;
+    process.env.CYPRESS_RGAA_LOGIN_PASSWORD = process.env.RGAA_LOGIN_PASSWORD;
+  }
+
   const run = await cypress.run({
     project: PKG_ROOT,
     browser: 'electron',
@@ -44,7 +50,9 @@ export async function runAudit(conf) {
         ignoreRules: conf.ignoreRules,
         httpHeaders: conf.httpHeaders,
         basicAuth: conf.basicAuth,
+        login: conf.login,
         waitAfterLoad: conf.waitAfterLoad,
+        interactions: conf.interactions !== false,
         ai: conf.ai?.enabled ? { maxItemsPerPage: conf.ai.maxItemsPerPage } : null,
         resultsFile
       }
@@ -69,7 +77,10 @@ export async function runAudit(conf) {
 
   if (!conf.quiet) {
     for (const p of pages) {
-      console.log(`  ${p.url} : ${p.violations.length} règle(s) en échec (${p.violations.reduce((s, v) => s + v.nodeCount, 0)} occurrence(s))`);
+      const apresInteraction = p.violations.filter((v) => v.state).reduce((s, v) => s + v.nodeCount, 0);
+      const detail = apresInteraction ? `, dont ${apresInteraction} révélée(s) par interaction` : '';
+      console.log(`  ${p.url} : ${p.violations.length} règle(s) en échec (${p.violations.reduce((s, v) => s + v.nodeCount, 0)} occurrence(s)${detail})`);
+      if (p.interactions?.aborted) console.log(`    ⚠ scénarios d'interaction interrompus : ${p.interactions.aborted}`);
     }
   }
 
@@ -106,6 +117,7 @@ export async function runAudit(conf) {
       maxViolations: conf.maxViolations,
       viewport: conf.viewport,
       ignoreRules: conf.ignoreRules,
+      interactions: conf.interactions !== false,
       ai: !!conf.ai?.enabled
     },
     coverage: coveredCriteria({ ai: !!conf.ai?.enabled }),
@@ -140,7 +152,8 @@ export async function runAudit(conf) {
     console.log(`Signalements « à vérifier » (heuristiques${conf.ai?.enabled ? ' + IA' : ''}) : ${findingsCount} — non bloquants`);
     console.log(`Couverture : ${summary.coverage.auto.length} critère(s) testé(s) automatiquement + ${summary.coverage.review.length} signalé(s) à vérifier, sur ${summary.coverage.total}`);
     if (aiUsage?.calls) {
-      console.log(`Consommation IA : ${aiUsage.calls} appel(s), ${aiUsage.inputTokens} tokens en entrée + ${aiUsage.outputTokens} en sortie (${aiUsage.model})`);
+      const cout = aiUsage.estimatedCostUsd == null ? '' : `, coût estimé ≈ ${aiUsage.estimatedCostUsd.toFixed(3)} $`;
+      console.log(`Consommation IA : ${aiUsage.calls} appel(s), ${aiUsage.inputTokens} tokens en entrée + ${aiUsage.outputTokens} en sortie (${aiUsage.model}${cout})`);
     }
     console.log(`Seuil d'échec : ${conf.failOn} (tolérance : ${conf.maxViolations})`);
     console.log(`Rapports : ${jsonPath}${conf.html ? ` et ${join(outputDir, 'rgaa-report.html')}` : ''}`);

@@ -11,3 +11,8 @@ rapport-rgaa-global.*
 test/.tmp/
 test/.tmp-ia/
 .env
+rgaa-mutdev*/
+rgaa-cartes-mut-dev/
+rapport-rgaa-global-*
+/comparaison-declarations.html
+/comparaison-declarations.pdf

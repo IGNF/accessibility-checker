@@ -9,6 +9,7 @@ Outil CLI de tests d'accessibilité RGAA 4.1 automatisés pour CI, basé sur axe
 - [src/rgaa-mapping.js](../src/rgaa-mapping.js) : table `AXE_TO_RGAA` (règle axe → critères RGAA + thématique). **Politique « tests solides »** : n'y ajouter que des règles taguées WCAG A/AA dont une violation prouve objectivement l'échec du critère — jamais de critère nécessitant un jugement humain (pertinence d'une alternative, caractère explicite d'un lien…).
 - [src/report.js](../src/report.js) : génération des rapports `rgaa-report.json` et `rgaa-report.html`.
 - [src/sitemap.js](../src/sitemap.js) : récupération des URLs depuis un sitemap.xml.
+- [src/interactions.js](../src/interactions.js) : scénarios d'interaction génériques (détection sémantique des dépliables et modales, dédoublonnage des occurrences par état) ; jamais de sélecteur propre à un site.
 - [cypress/e2e/rgaa.cy.js](../cypress/e2e/rgaa.cy.js) : spec Cypress qui exécute axe-core sur chaque page.
 
 ## Conventions
