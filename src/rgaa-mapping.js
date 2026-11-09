@@ -161,8 +161,11 @@ export const AXE_EXPERIMENTAL_RULES = {
   'css-orientation-lock':        { rgaa: ['13.9'], theme: 'Consultation' }  // 13.9.1 : orientation verrouillée par CSS
 };
 
-/** Critères couverts par des signalements heuristiques « à vérifier » (jamais bloquants). */
-export const HEURISTIC_CRITERIA = ['1.9', '4.1', '10.5', '10.6', '10.7', '11.10', '12.1', '12.2', '12.8', '12.9', '13.3'];
+/**
+ * Critères couverts par des signalements heuristiques « à vérifier » (jamais bloquants).
+ * 7.5 et 8.6 : uniquement via le mode parcours (état d'un formulaire après soumission).
+ */
+export const HEURISTIC_CRITERIA = ['1.9', '4.1', '7.5', '8.6', '10.5', '10.6', '10.7', '11.10', '12.1', '12.2', '12.8', '12.9', '13.3'];
 
 /** Critères couverts par les signalements IA « à vérifier » (option --ai). */
 export const AI_CRITERIA = ['1.2', '1.3', '1.6', '1.8', '6.1', '8.6', '8.7', '9.1', '9.2', '11.2', '11.5', '11.9'];

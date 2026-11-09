@@ -41,6 +41,9 @@ Options :
                          est réutilisée pour toutes les pages.
   --login-url <url>      Page qui déclenche la connexion (ex. https://site/login). Défaut :
                          la première URL analysée — à préciser si celle-ci est publique.
+  --parcours <fichier>   Fichier JSON de parcours : suites d'actions (cliquer, saisir, soumettre,
+                         attendre, analyser) rejouées avant analyse — ex. soumission d'un
+                         formulaire vide (11.10, 12.8, 8.6). Voir README.
   --no-interactions      Désactiver les scénarios d'interaction génériques (ouverture des
                          menus, dépliables et modales avant réanalyse ; menu ouvert à 320 px).
   --no-html              Ne pas générer le rapport HTML
@@ -73,6 +76,7 @@ function parseArgs(argv) {
       case '--ai-max-items': args.aiMaxItems = Number(argv[++i]); break;
       case '--login-origin': args.loginOrigin = argv[++i]; break;
       case '--login-url': args.loginUrl = argv[++i]; break;
+      case '--parcours': args.parcoursFile = argv[++i]; break;
       case '--no-interactions': args.interactions = false; break;
       case '--no-html': args.html = false; break;
       case '--quiet': args.quiet = true; break;
@@ -116,6 +120,7 @@ function loadConfig(args) {
     ignoreRules: fileConf.ignoreRules ?? [],
     waitAfterLoad: fileConf.waitAfterLoad ?? 1000,
     interactions: args.interactions ?? fileConf.interactions ?? true,
+    parcours: fileConf.parcours ?? [],
     httpHeaders: fileConf.httpHeaders ?? {},
     basicAuth: fileConf.basicAuth ?? null,
     // Connexion via un formulaire sur une autre origine (SSO) ; sélecteurs par défaut = Keycloak
@@ -136,8 +141,36 @@ function loadConfig(args) {
     }
   };
 
-  if (!conf.urls.length && !conf.sitemap) {
-    console.error('Aucune URL fournie. Utilisez --url, --sitemap ou un fichier de configuration.');
+  if (args.parcoursFile) {
+    const path = resolve(args.parcoursFile);
+    if (!existsSync(path)) {
+      console.error(`Fichier de parcours introuvable : ${path}`);
+      process.exit(2);
+    }
+    try {
+      const charge = JSON.parse(readFileSync(path, 'utf8'));
+      conf.parcours = [...conf.parcours, ...(Array.isArray(charge) ? charge : charge.parcours ?? [])];
+    } catch (e) {
+      console.error(`Fichier de parcours invalide : ${e.message}`);
+      process.exit(2);
+    }
+  }
+  const ACTIONS = ['cliquer', 'saisir', 'soumettre', 'attendre', 'analyser'];
+  for (const [i, pc] of conf.parcours.entries()) {
+    const ok = pc && typeof pc.nom === 'string' && pc.nom && /^https?:\/\//.test(pc.url ?? '') && Array.isArray(pc.etapes) && pc.etapes.length;
+    const actionsOk = ok && pc.etapes.every((e) => e && typeof e === 'object' && ACTIONS.some((a) => a in e));
+    if (!ok || !actionsOk) {
+      console.error(`Parcours n°${i + 1} invalide : attendu { nom, url, etapes: [{ ${ACTIONS.join(' | ')} }, …] }`);
+      process.exit(2);
+    }
+    if (!pc.etapes.some((e) => 'analyser' in e)) {
+      console.error(`Parcours « ${pc.nom} » : aucune étape « analyser », rien ne serait rapporté.`);
+      process.exit(2);
+    }
+  }
+
+  if (!conf.urls.length && !conf.sitemap && !conf.parcours.length) {
+    console.error('Aucune URL fournie. Utilisez --url, --sitemap, --parcours ou un fichier de configuration.');
     printHelp();
     process.exit(2);
   }

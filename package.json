@@ -11,6 +11,7 @@
     "test:fixtures": "node --test test/fixtures.test.js",
     "test:ia": "node --test test/ia-pipeline.test.js test/fixtures-ia.test.js",
     "test:sso": "node --test test/sso.test.js",
+    "test:parcours": "node --test test/parcours.test.js",
     "cypress:open": "cypress open"
   },
   "engines": {

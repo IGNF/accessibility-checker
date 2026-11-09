@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>Fixture parcours — formulaire avec erreurs mal gérées</title>
+  <style>[hidden] { display: none !important; }</style>
+</head>
+<body>
+  <header><p>Démonstrateur rgaa-ci</p></header>
+  <main>
+    <h1>Nous écrire</h1>
+    <p>À la soumission vide, des erreurs apparaissent : messages non reliés aux champs (11.10),
+      focus laissé sur le bouton (12.8), titre inchangé (8.6), et une zone d'erreur contenant un
+      bouton sans nom (7.1) — tout cela n'existe qu'après soumission.</p>
+    <form id="contact" novalidate action="#">
+      <div id="zone-erreurs" hidden>
+        <p>Le formulaire contient des erreurs.</p>
+        <button type="button"></button>
+      </div>
+      <label for="email">Adresse courriel</label>
+      <input id="email" name="email" type="email" required>
+      <p id="email-erreur" class="erreur" hidden>Saisissez une adresse courriel.</p>
+      <label for="message">Votre demande</label>
+      <textarea id="message" name="message" required></textarea>
+      <p id="message-erreur" class="erreur" hidden>Saisissez votre demande.</p>
+      <button type="submit" id="envoyer">Envoyer</button>
+    </form>
+  </main>
+  <footer><p>Pied de page</p></footer>
+  <script>
+    document.getElementById('contact').addEventListener('submit', (e) => {
+      e.preventDefault();
+      for (const id of ['email', 'message']) {
+        const champ = document.getElementById(id);
+        const vide = !champ.value.trim();
+        champ.setAttribute('aria-invalid', String(vide));
+        document.getElementById(`${id}-erreur`).hidden = !vide;
+      }
+      document.getElementById('zone-erreurs').hidden = false;
+    });
+  </script>
+</body>
+</html>

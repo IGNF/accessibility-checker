@@ -145,6 +145,68 @@ export function checkReflow(win) {
   };
 }
 
+/**
+ * État d'un formulaire après soumission (mode parcours) : signalements « à vérifier »
+ * sur le contrôle de saisie (11.10), la gestion du focus (12.8), le titre de page (8.6)
+ * et les messages de statut (7.5). `titleBefore` est le <title> relevé avant l'action.
+ */
+export function checkFormState(win, { titleBefore } = {}) {
+  const doc = win.document;
+  const txt = (el) => (el?.textContent ?? '').replace(/\s+/g, ' ').trim();
+  const out = [];
+  const push = (criterion, theme, target, message) => out.push({ criterion, theme, source: 'heuristique', target, message });
+
+  const invalidFields = Array.from(doc.querySelectorAll(
+    'input[aria-invalid="true"], select[aria-invalid="true"], textarea[aria-invalid="true"], ' +
+    '.fr-input-group--error input, .fr-input-group--error textarea, .fr-select-group--error select, ' +
+    '.fr-fieldset--error input, .fr-checkbox-group--error input, .fr-radio-group--error input, ' +
+    'input:invalid, select:invalid, textarea:invalid'
+  )).filter(isVisible);
+  const errorMessages = Array.from(doc.querySelectorAll(
+    '.fr-error-text, .fr-message--error, [role="alert"], [aria-live="assertive"], [aria-live="polite"], .error, .invalid-feedback'
+  )).filter((el) => isVisible(el) && txt(el));
+
+  if (!invalidFields.length && !errorMessages.length) {
+    push('11.10', 'Formulaires', 'form',
+      'Après soumission, aucun champ marqué invalide ni message d’erreur visible n’a été trouvé : vérifier que le contrôle de saisie signale les erreurs (champs obligatoires, format attendu).');
+    return out;
+  }
+
+  // 11.10 : chaque champ en erreur doit être relié à son message (aria-describedby / aria-errormessage)
+  const unlinked = invalidFields.filter((f) => {
+    const ids = `${f.getAttribute('aria-describedby') ?? ''} ${f.getAttribute('aria-errormessage') ?? ''}`.split(/\s+/).filter(Boolean);
+    return !ids.some((id) => txt(doc.getElementById(id)));
+  });
+  if (unlinked.length) {
+    push('11.10', 'Formulaires', unlinked.slice(0, 5).map(cssPath).join(' ; '),
+      `${unlinked.length} champ(s) en erreur sans message relié par aria-describedby/aria-errormessage (ou cible vide) : vérifier que le message d’erreur est restitué avec le champ.`);
+  }
+
+  // 12.8 : le focus doit être déplacé vers la première erreur (champ ou résumé d'erreurs)
+  const active = doc.activeElement;
+  const firstInvalid = invalidFields[0];
+  const focusOnError = active && active !== doc.body
+    && (invalidFields.includes(active) || errorMessages.some((m) => m === active || m.contains(active)) || active.closest('[role="alert"], [aria-live]'));
+  if (!focusOnError) {
+    push('12.8', 'Navigation', firstInvalid ? cssPath(firstInvalid) : 'form',
+      `Après soumission avec erreurs, le focus est sur « ${active && active !== doc.body ? cssPath(active) : 'body'} » et non sur le premier champ en erreur ou un résumé des erreurs : vérifier l’ordre de tabulation et la gestion du focus.`);
+  }
+
+  // 8.6 : le titre de page devrait refléter l'état d'erreur
+  if (titleBefore && doc.title === titleBefore) {
+    push('8.6', 'Éléments obligatoires', 'title',
+      `Le <title> est inchangé (« ${doc.title.slice(0, 80)} ») alors que le formulaire présente des erreurs : vérifier qu’il annonce l’erreur (ex. « Erreur – … »).`);
+  }
+
+  // 7.5 : les messages d'erreur apparus doivent être restitués (zone de statut ou focus)
+  const announced = errorMessages.some((m) => m.closest('[role="alert"], [role="status"], [aria-live]'));
+  if (errorMessages.length && !announced && !focusOnError) {
+    push('7.5', 'Scripts', errorMessages.slice(0, 3).map(cssPath).join(' ; '),
+      'Des messages d’erreur sont apparus hors de toute zone de statut (role="alert"/"status", aria-live) et sans déplacement du focus : vérifier qu’ils sont restitués par les technologies d’assistance.');
+  }
+  return out;
+}
+
 /** Signalements heuristiques « à vérifier » : 1.9, 4.1, 10.5, 10.6, 10.7, 11.10, 12.7, 12.8, 12.9 et 13.3. */
 export function collectFindings(win) {
   return [
@@ -383,6 +445,25 @@ export function collectPageFeatures(win) {
   const hasSitemapLink = Array.from(doc.querySelectorAll('a[href]'))
     .some((a) => /plan\s*du\s*site|sitemap/i.test(`${a.textContent} ${a.getAttribute('href')}`));
   return { navPaths, hasSearch, hasSitemapLink };
+}
+
+/**
+ * Liens internes (même origine) de la page, dédoublonnés et sans fragment :
+ * sert de graine pour élargir l'échantillon (espace connecté, pages profondes).
+ */
+export function collectInternalLinks(win, max = 150) {
+  const doc = win.document;
+  const out = new Set();
+  for (const a of doc.querySelectorAll('a[href]')) {
+    let u;
+    try { u = new win.URL(a.getAttribute('href'), win.location.href); } catch { continue; }
+    if (u.origin !== win.location.origin || !/^https?:$/.test(u.protocol)) continue;
+    u.hash = '';
+    if (u.href === win.location.href.split('#')[0]) continue;
+    out.add(u.href);
+    if (out.size >= max) break;
+  }
+  return Array.from(out);
 }
 
 /** Extraits de page soumis au tier IA (uniquement si --ai est actif). */

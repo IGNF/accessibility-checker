@@ -14,7 +14,9 @@ import {
   checkReflow,
   collectFindings,
   collectPageFeatures,
-  collectAiExtracts
+  collectInternalLinks,
+  collectAiExtracts,
+  checkFormState
 } from '../../src/custom-checks.js';
 import { findTriggers, describeTrigger, closeDialogs, violationKeys, newViolations } from '../../src/interactions.js';
 import frLocale from 'axe-core/locales/fr.json';
@@ -129,7 +131,9 @@ function analyseState(page, state, seen, seenFindings) {
 function runInteractionPasses(page) {
   const seen = new Set(page.violations.flatMap(violationKeys));
   const seenFindings = new Set(page.findings.map((f) => `${f.criterion}|${f.target}`));
-  const samePage = (win) => win.location.href.split('#')[0] === page.resolvedUrl;
+  // Même page = même origine et même chemin : une SPA peut modifier la query string
+  // (panneau ouvert, onglet actif) sans quitter la page auditée.
+  const samePage = (win) => win.location.origin + win.location.pathname === page.resolvedPath;
 
   cy.window({ log: false }).then((win) => {
     const { disclosures, modals } = findTriggers(win.document);
@@ -202,54 +206,163 @@ function restoreLoginSession() {
   });
 }
 
+/**
+ * Ouvre une page prête à être analysée : neutralisation de la CSP, restauration de la
+ * session SSO, visite, attente du rendu (SPA) et injection d'axe-core.
+ */
+function openPage(url) {
+  // Neutralise la CSP (en-tête et balise meta) qui bloquerait l'injection d'axe-core
+  cy.intercept({ resourceType: 'document' }, (req) => {
+    req.continue((res) => {
+      delete res.headers['content-security-policy'];
+      delete res.headers['content-security-policy-report-only'];
+      if (typeof res.body === 'string') {
+        res.body = res.body.replace(
+          /<meta[^>]*http-equiv=["']?content-security-policy["']?[^>]*>/gi,
+          ''
+        );
+      }
+    });
+  });
+
+  if (conf.login) restoreLoginSession();
+
+  cy.visit(url, {
+    headers: conf.httpHeaders ?? {},
+    auth: conf.basicAuth ?? undefined,
+    failOnStatusCode: false
+  });
+
+  // Session restaurée : un éventuel aller-retour silencieux vers le SSO (cookie de
+  // session) doit être terminé avant toute commande sur le DOM ; cy.location
+  // patiente tant que l'application est sur une autre origine.
+  if (conf.login) {
+    const pageOrigin = new URL(url).origin;
+    cy.wait(conf.waitAfterLoad || 1000);
+    cy.location('origin', { timeout: 30000 }).should('eq', pageOrigin);
+    cy.wait(500);
+    cy.location('origin', { timeout: 30000 }).should('eq', pageOrigin);
+  }
+
+  // Attend le rendu effectif (SPA) : le DOM doit contenir un contenu significatif
+  // (un shell SPA non rendu n'a ni éléments nombreux ni texte)
+  cy.get('body', { timeout: 30000 }).should(($b) => {
+    const significatif = $b.find('*').length > 10 || $b.text().trim().length > 0;
+    expect(significatif, 'contenu significatif dans <body>').to.be.true;
+  });
+  if (conf.waitAfterLoad) cy.wait(conf.waitAfterLoad);
+
+  cy.injectAxe();
+  cy.configureAxe({ locale: frLocale });
+}
+
+/**
+ * Mode parcours : rejoue une suite d'actions (cliquer, saisir, soumettre, attendre) puis
+ * analyse la page dans l'état obtenu. Seules les occurrences absentes de l'état initial
+ * sont rapportées, annotées du libellé de l'étape « analyser ». Avec « formulaire: true »,
+ * l'étape vérifie en plus l'état du formulaire soumis (11.10, 12.8, 8.6, 7.5).
+ */
+function runParcours(pc) {
+  openPage(pc.url);
+
+  const page = {
+    url: pc.url,
+    parcours: pc.nom,
+    etapes: [],
+    timestamp: new Date().toISOString(),
+    passesCount: 0,
+    incompleteCount: 0,
+    violations: [],
+    findings: [],
+    interactions: null,
+    pageFeatures: null,
+    links: [],
+    aiExtracts: null
+  };
+  const seen = new Set();
+  const seenFindings = new Set();
+  let titleBefore = '';
+
+  // État initial : sert de référence, n'est pas rapporté (ajouter l'URL aux « urls » pour l'auditer)
+  cy.window({ log: false })
+    .then({ timeout: 120000 }, (win) => {
+      titleBefore = win.document.title;
+      return win.axe.run(win.document, AXE_OPTIONS);
+    })
+    .then((results) => {
+      const ref = { violations: [], findings: [] };
+      ingestAxeResults(results, ref);
+      page.passesCount = results.passes.length;
+      page.incompleteCount = results.incomplete.length;
+      for (const v of ref.violations) violationKeys(v).forEach((k) => seen.add(k));
+      for (const f of ref.findings) seenFindings.add(`${f.criterion}|${f.target}`);
+    });
+  cy.window({ log: false }).then((win) => {
+    for (const v of runCustomChecks(win).map(toViolation)) violationKeys(v).forEach((k) => seen.add(k));
+  });
+
+  const timeout = 15000;
+  for (const [i, etape] of (pc.etapes ?? []).entries()) {
+    const num = i + 1;
+    if (etape.cliquer) {
+      page.etapes.push(`${num}. cliquer « ${etape.cliquer} »`);
+      cy.get(etape.cliquer, { timeout }).first().click();
+    } else if (etape.saisir) {
+      page.etapes.push(`${num}. saisir dans « ${etape.saisir} »`);
+      cy.get(etape.saisir, { timeout }).first().clear().type(String(etape.valeur ?? ''), { parseSpecialCharSequences: false });
+    } else if (etape.soumettre) {
+      page.etapes.push(`${num}. soumettre « ${etape.soumettre} »`);
+      cy.get(etape.soumettre, { timeout }).first().then(($f) => {
+        const form = $f[0].tagName === 'FORM' ? $f[0] : $f[0].closest('form') ?? $f[0].querySelector('form');
+        const bouton = form?.querySelector('button[type="submit"], input[type="submit"], button:not([type])');
+        if (bouton) cy.wrap(bouton, { log: false }).click();
+        else if (form) form.requestSubmit ? form.requestSubmit() : form.submit();
+        else throw new Error(`étape ${num} : aucun formulaire trouvé pour « ${etape.soumettre} »`);
+      });
+    } else if (etape.attendre !== undefined) {
+      page.etapes.push(`${num}. attendre ${typeof etape.attendre === 'number' ? `${etape.attendre} ms` : `« ${etape.attendre} »`}`);
+      if (typeof etape.attendre === 'number') cy.wait(etape.attendre);
+      else cy.get(etape.attendre, { timeout: 30000 });
+    } else if (etape.analyser) {
+      const state = String(etape.analyser);
+      page.etapes.push(`${num}. analyser (${state})`);
+      cy.wait(SETTLE_MS, { log: false });
+      // Une étape a pu provoquer une navigation : axe doit alors être réinjecté
+      cy.window({ log: false }).then((win) => {
+        if (!win.axe) {
+          cy.injectAxe();
+          cy.configureAxe({ locale: frLocale });
+        }
+      });
+      analyseState(page, state, seen, seenFindings);
+      if (etape.formulaire) {
+        cy.window({ log: false }).then((win) => {
+          for (const f of checkFormState(win, { titleBefore })) {
+            const key = `${f.criterion}|${f.target}`;
+            if (seenFindings.has(key)) continue;
+            seenFindings.add(key);
+            page.findings.push({ ...f, state });
+          }
+        });
+      }
+    } else {
+      throw new Error(`parcours « ${pc.nom} », étape ${num} : action inconnue (${Object.keys(etape).join(', ')})`);
+    }
+  }
+
+  cy.then(() => {
+    cy.task('rgaaResult', page);
+    cy.log(`parcours « ${pc.nom} » : ${page.violations.length} règle(s) en échec, ${page.findings.length} signalement(s)`);
+  });
+}
+
 describe('Audit RGAA (critères automatisables)', () => {
-  if (conf.login) it(`connexion SSO via ${conf.login.origin}`, restoreLoginSession);
+  // Le formulaire SSO peut tarder ou ne pas s'afficher : on rejoue la connexion avant d'y renoncer
+  if (conf.login) it(`connexion SSO via ${conf.login.origin}`, { retries: 2 }, restoreLoginSession);
 
   conf.urls.forEach((url) => {
     it(`analyse ${url}`, () => {
-      // Neutralise la CSP (en-tête et balise meta) qui bloquerait l'injection d'axe-core
-      cy.intercept({ resourceType: 'document' }, (req) => {
-        req.continue((res) => {
-          delete res.headers['content-security-policy'];
-          delete res.headers['content-security-policy-report-only'];
-          if (typeof res.body === 'string') {
-            res.body = res.body.replace(
-              /<meta[^>]*http-equiv=["']?content-security-policy["']?[^>]*>/gi,
-              ''
-            );
-          }
-        });
-      });
-
-      if (conf.login) restoreLoginSession();
-
-      cy.visit(url, {
-        headers: conf.httpHeaders ?? {},
-        auth: conf.basicAuth ?? undefined,
-        failOnStatusCode: false
-      });
-
-      // Session restaurée : un éventuel aller-retour silencieux vers le SSO (cookie de
-      // session) doit être terminé avant toute commande sur le DOM ; cy.location
-      // patiente tant que l'application est sur une autre origine.
-      if (conf.login) {
-        const pageOrigin = new URL(url).origin;
-        cy.wait(conf.waitAfterLoad || 1000);
-        cy.location('origin', { timeout: 30000 }).should('eq', pageOrigin);
-        cy.wait(500);
-        cy.location('origin', { timeout: 30000 }).should('eq', pageOrigin);
-      }
-
-      // Attend le rendu effectif (SPA) : le DOM doit contenir un contenu significatif
-      // (un shell SPA non rendu n'a ni éléments nombreux ni texte)
-      cy.get('body', { timeout: 30000 }).should(($b) => {
-        const significatif = $b.find('*').length > 10 || $b.text().trim().length > 0;
-        expect(significatif, 'contenu significatif dans <body>').to.be.true;
-      });
-      if (conf.waitAfterLoad) cy.wait(conf.waitAfterLoad);
-
-      cy.injectAxe();
-      cy.configureAxe({ locale: frLocale });
+      openPage(url);
 
       const page = {
         url,
@@ -260,12 +373,14 @@ describe('Audit RGAA (critères automatisables)', () => {
         findings: [],
         interactions: null,
         pageFeatures: null,
+        links: [],
         aiExtracts: null
       };
 
       cy.window({ log: false })
         .then({ timeout: 120000 }, (win) => {
           page.resolvedUrl = win.location.href.split('#')[0];
+          page.resolvedPath = win.location.origin + win.location.pathname;
           return win.axe.run(win.document, AXE_OPTIONS);
         })
         .then((results) => ingestAxeResults(results, page));
@@ -275,6 +390,7 @@ describe('Audit RGAA (critères automatisables)', () => {
         page.violations.push(...runCustomChecks(win).map(toViolation));
         page.findings.push(...collectFindings(win));
         page.pageFeatures = collectPageFeatures(win);
+        page.links = collectInternalLinks(win);
         if (conf.ai) page.aiExtracts = collectAiExtracts(win, conf.ai.maxItemsPerPage);
       });
 
@@ -307,7 +423,7 @@ describe('Audit RGAA (critères automatisables)', () => {
           cy.wait(SETTLE_MS, { log: false });
           cy.window({ log: false }).then((w) => {
             page.interactions = { ...(page.interactions ?? {}), menu320: opened.map(describeTrigger) };
-            if (w.location.href.split('#')[0] !== page.resolvedUrl) return;
+            if (w.location.origin + w.location.pathname !== page.resolvedPath) return;
             const already = page.violations.some((v) => v.rule === 'rgaa-reflow-320');
             const r = checkReflow(w);
             const state = 'à 320 px, menu ouvert';
@@ -330,5 +446,9 @@ describe('Audit RGAA (critères automatisables)', () => {
         cy.log(`${page.violations.length} règle(s) en échec, ${page.findings.length} signalement(s) à vérifier`);
       });
     });
+  });
+
+  (conf.parcours ?? []).forEach((pc) => {
+    it(`parcours « ${pc.nom} »`, () => runParcours(pc));
   });
 });

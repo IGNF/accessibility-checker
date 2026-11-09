@@ -11,6 +11,7 @@ rapport-rgaa-global.*
 test/.tmp/
 test/.tmp-ia/
 test/.tmp-sso/
+test/.tmp-parcours/
 .env
 rgaa-mutdev*/
 rgaa-cartes-mut-dev/

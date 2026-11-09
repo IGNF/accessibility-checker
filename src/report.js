@@ -70,10 +70,16 @@ export function buildHtmlReport(summary) {
       ? `<p class="interactions">Scénarios d'interaction : ${(inter.disclosures ?? []).length} contenu(s) dépliable(s) et ${(inter.modals ?? []).length} modale(s) ouverts puis réanalysés${(inter.disclosures ?? []).length + (inter.modals ?? []).length ? ` (${esc([...(inter.disclosures ?? []), ...(inter.modals ?? [])].slice(0, 12).join(' · '))}${(inter.disclosures ?? []).length + (inter.modals ?? []).length > 12 ? ' …' : ''})` : ''}${inter.menu320?.length ? ` ; à 320 px, menu ouvert via ${esc(inter.menu320.join(' · '))}` : ''}.${inter.aborted ? ` <strong>Interrompus :</strong> ${esc(inter.aborted)}.` : ''}</p>`
       : '';
 
+    const sectionId = `page-${esc(encodeURIComponent(p.parcours ? `${p.url}#parcours:${p.parcours}` : p.url))}`;
+    const titre = p.parcours ? `Parcours « ${esc(p.parcours)} » — ${esc(p.url)}` : esc(p.url);
+    const etapesHtml = p.parcours
+      ? `<p class="interactions">Étapes : ${esc((p.etapes ?? []).join(' → '))}. Seuls les défauts absents de l'état initial de la page sont rapportés ici.</p>`
+      : '';
     return `
-    <section aria-labelledby="page-${esc(encodeURIComponent(p.url))}">
-      <h2 id="page-${esc(encodeURIComponent(p.url))}">${esc(p.url)}</h2>
+    <section aria-labelledby="${sectionId}">
+      <h2 id="${sectionId}">${titre}</h2>
       <p>${p.violations.length} règle(s) en échec — ${p.passesCount} règle(s) conformes — ${p.incompleteCount} à vérifier manuellement.</p>
+      ${etapesHtml}
       ${interHtml}
       ${p.violations.length ? `
       <table>
@@ -97,7 +103,7 @@ export function buildHtmlReport(summary) {
   const errorsHtml = summary.errors.length ? `
     <section aria-labelledby="titre-erreurs">
       <h2 id="titre-erreurs">Pages non analysées</h2>
-      <ul>${summary.errors.map((e) => `<li>${esc(e.url)} — ${esc(e.error)}</li>`).join('')}</ul>
+      <ul>${summary.errors.map((e) => `<li>${e.parcours ? `Parcours « ${esc(e.parcours)} » — ` : ''}${esc(e.url)} — ${esc(e.error)}</li>`).join('')}</ul>
     </section>` : '';
 
   const siteFindingsHtml = summary.siteFindings?.length ? `
@@ -155,7 +161,8 @@ ${aiUsageHtml}
 <section aria-labelledby="titre-synthese">
   <h2 id="titre-synthese">Synthèse</h2>
   <p>
-    <span class="kpi"><strong>${totals.pages}</strong> pages analysées</span>
+    <span class="kpi"><strong>${totals.pages}</strong> pages analysées</span>${totals.parcours ? `
+    <span class="kpi"><strong>${totals.parcours}</strong> parcours rejoués</span>` : ''}
     <span class="kpi"><strong>${totals.violationsBySeverity.critical}</strong> critiques</span>
     <span class="kpi"><strong>${totals.violationsBySeverity.serious}</strong> sérieuses</span>
     <span class="kpi"><strong>${totals.violationsBySeverity.moderate}</strong> modérées</span>

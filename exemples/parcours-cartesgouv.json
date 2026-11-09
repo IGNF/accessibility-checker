@@ -1,0 +1,32 @@
+{
+  "parcours": [
+    {
+      "nom": "Contact — soumission du formulaire vide",
+      "url": "https://cartes.gouv.fr/aide/fr/nous-ecrire/",
+      "etapes": [
+        { "cliquer": "button[title='Envoyer la demande de contact']" },
+        { "attendre": 800 },
+        { "analyser": "après soumission du formulaire de contact vide", "formulaire": true }
+      ]
+    },
+    {
+      "nom": "Contact — adresse courriel invalide",
+      "url": "https://cartes.gouv.fr/aide/fr/nous-ecrire/",
+      "etapes": [
+        { "saisir": "#input-mail", "valeur": "adresse-invalide" },
+        { "cliquer": "button[title='Envoyer la demande de contact']" },
+        { "attendre": 800 },
+        { "analyser": "après saisie d'une adresse invalide", "formulaire": true }
+      ]
+    },
+    {
+      "nom": "Recherche de données — résultats filtrés",
+      "url": "https://cartes.gouv.fr/rechercher-une-donnee/search",
+      "etapes": [
+        { "saisir": "input[type='search'], input[type='text']", "valeur": "cadastre" },
+        { "attendre": 2500 },
+        { "analyser": "après recherche « cadastre »" }
+      ]
+    }
+  ]
+}

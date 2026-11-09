@@ -25,7 +25,7 @@ export async function runAudit(conf) {
   const resultsFile = join(outputDir, '.rgaa-results.ndjson');
   rmSync(resultsFile, { force: true });
 
-  if (!conf.quiet) console.log(`▶ Audit Cypress de ${conf.urls.length} page(s) …`);
+  if (!conf.quiet) console.log(`▶ Audit Cypress de ${conf.urls.length} page(s)${conf.parcours?.length ? ` et ${conf.parcours.length} parcours` : ''} …`);
 
   // Identifiants SSO transmis par l'environnement hérité (préfixe CYPRESS_), pas en argument de ligne de commande
   if (conf.login) {
@@ -41,8 +41,12 @@ export async function runAudit(conf) {
       viewportWidth: conf.viewportSize.width,
       viewportHeight: conf.viewportSize.height,
       pageLoadTimeout: conf.timeout,
+      // Une page qui échoue (SSO lent, SPA non rendue…) est rejouée une fois avant d'être déclarée inaccessible
+      retries: { runMode: 1, openMode: 0 },
       video: false,
-      screenshotOnRunFailure: false
+      // RGAA_DEBUG=1 : capture d'écran du navigateur à chaque échec (diagnostic SSO, SPA…)
+      screenshotOnRunFailure: !!process.env.RGAA_DEBUG,
+      screenshotsFolder: join(outputDir, 'captures-echecs')
     },
     env: {
       rgaa: {
@@ -53,6 +57,7 @@ export async function runAudit(conf) {
         login: conf.login,
         waitAfterLoad: conf.waitAfterLoad,
         interactions: conf.interactions !== false,
+        parcours: conf.parcours ?? [],
         ai: conf.ai?.enabled ? { maxItemsPerPage: conf.ai.maxItemsPerPage } : null,
         resultsFile
       }
@@ -68,24 +73,27 @@ export async function runAudit(conf) {
     : [];
   rmSync(resultsFile, { force: true });
 
-  // URLs sans résultat = test Cypress en échec (page inaccessible, etc.)
-  const analyzed = new Set(pages.map((p) => p.url));
-  const errors = conf.urls
-    .filter((u) => !analyzed.has(u))
-    .map((url) => ({ url, error: "analyse impossible (voir la sortie Cypress)" }));
-  for (const e of errors) console.error(`  ✖ Impossible d'analyser ${e.url}`);
+  // URLs / parcours sans résultat = test Cypress en échec (page inaccessible, étape introuvable…)
+  const analyzed = new Set(pages.filter((p) => !p.parcours).map((p) => p.url));
+  const parcoursDone = new Set(pages.filter((p) => p.parcours).map((p) => p.parcours));
+  const errors = [
+    ...conf.urls.filter((u) => !analyzed.has(u)).map((url) => ({ url, error: 'analyse impossible (voir la sortie Cypress)' })),
+    ...(conf.parcours ?? []).filter((pc) => !parcoursDone.has(pc.nom)).map((pc) => ({ url: pc.url, parcours: pc.nom, error: 'parcours interrompu (voir la sortie Cypress)' }))
+  ];
+  for (const e of errors) console.error(`  ✖ Impossible d'analyser ${e.parcours ? `le parcours « ${e.parcours} » (${e.url})` : e.url}`);
 
   if (!conf.quiet) {
     for (const p of pages) {
       const apresInteraction = p.violations.filter((v) => v.state).reduce((s, v) => s + v.nodeCount, 0);
       const detail = apresInteraction ? `, dont ${apresInteraction} révélée(s) par interaction` : '';
-      console.log(`  ${p.url} : ${p.violations.length} règle(s) en échec (${p.violations.reduce((s, v) => s + v.nodeCount, 0)} occurrence(s)${detail})`);
+      const label = p.parcours ? `parcours « ${p.parcours} » (${p.url})` : p.url;
+      console.log(`  ${label} : ${p.violations.length} règle(s) en échec (${p.violations.reduce((s, v) => s + v.nodeCount, 0)} occurrence(s)${detail})`);
       if (p.interactions?.aborted) console.log(`    ⚠ scénarios d'interaction interrompus : ${p.interactions.aborted}`);
     }
   }
 
   // Tests inter-pages (12.1, 12.2) — signalements « à vérifier », jamais bloquants
-  const siteFindings = runCrossPageChecks(pages);
+  const siteFindings = runCrossPageChecks(pages.filter((p) => !p.parcours));
 
   // Tier IA « à vérifier » (option --ai) — jamais bloquant
   let aiUsage = null;
@@ -122,7 +130,8 @@ export async function runAudit(conf) {
     },
     coverage: coveredCriteria({ ai: !!conf.ai?.enabled }),
     totals: {
-      pages: pages.length,
+      pages: pages.filter((p) => !p.parcours).length,
+      parcours: pages.filter((p) => p.parcours).length,
       pageErrors: errors.length,
       violationsBySeverity: bySeverity,
       violationsAboveThreshold: failingCount,
@@ -147,7 +156,8 @@ export async function runAudit(conf) {
   // Résumé console
   if (!conf.quiet) {
     console.log('\n════════ Résumé RGAA ════════');
-    console.log(`Pages analysées : ${pages.length} (erreurs : ${errors.length})`);
+    const nbParcours = pages.filter((p) => p.parcours).length;
+    console.log(`Pages analysées : ${pages.length - nbParcours}${nbParcours ? ` + ${nbParcours} parcours` : ''} (erreurs : ${errors.length})`);
     console.log(`Occurrences par sévérité : critique=${bySeverity.critical} sérieuse=${bySeverity.serious} modérée=${bySeverity.moderate} mineure=${bySeverity.minor}`);
     console.log(`Signalements « à vérifier » (heuristiques${conf.ai?.enabled ? ' + IA' : ''}) : ${findingsCount} — non bloquants`);
     console.log(`Couverture : ${summary.coverage.auto.length} critère(s) testé(s) automatiquement + ${summary.coverage.review.length} signalé(s) à vérifier, sur ${summary.coverage.total}`);

@@ -55,6 +55,7 @@ node bin/rgaa-ci.js --config rgaa.config.json
 | `--no-interactions` | Désactive les scénarios d'interaction génériques (voir ci-dessous) | activés |
 | `--login-origin <url>` | Origine du SSO (Keycloak…) vers lequel redirigent les pages protégées ; identifiants dans `RGAA_LOGIN_USER` / `RGAA_LOGIN_PASSWORD` | — |
 | `--login-url <url>` | Page qui déclenche la connexion (ex. `https://site/login`) | première URL |
+| `--parcours <fichier>` | Fichier JSON de parcours (actions rejouées avant analyse, voir ci-dessous) | — |
 | `--no-html` | Désactive le rapport HTML | — |
 | `--quiet` | Sortie console minimale | — |
 
@@ -77,6 +78,34 @@ occurrences **nouvelles** sont ajoutées au rapport, annotées de l'état qui le
 (ex. « après ouverture de la modale « Paramètres d'affichage » »). Limites : 20 dépliables
 et 5 modales par page. Désactivable avec `--no-interactions` ou `"interactions": false`
 dans la configuration.
+
+### Parcours (états après action)
+
+Les scénarios génériques n'activent jamais de lien ni de soumission. Pour auditer un
+**état précis** — formulaire soumis vide, recherche effectuée, filtre appliqué — décrivez un
+parcours (`--parcours fichier.json` ou champ `parcours` de la configuration) :
+
+```json
+{ "parcours": [{
+  "nom": "Contact — soumission du formulaire vide",
+  "url": "https://cartes.gouv.fr/aide/fr/nous-ecrire/",
+  "etapes": [
+    { "cliquer": "button[title='Envoyer la demande de contact']" },
+    { "attendre": 800 },
+    { "analyser": "après soumission du formulaire vide", "formulaire": true }
+  ]
+}]}
+```
+
+Actions : `cliquer` (sélecteur), `saisir` (sélecteur + `valeur`), `soumettre` (sélecteur du
+formulaire ou d'un de ses éléments), `attendre` (millisecondes ou sélecteur à attendre),
+`analyser` (libellé de l'état). Chaque étape `analyser` relance axe-core et les contrôles
+maison ; **seuls les défauts absents de l'état initial** sont rapportés, annotés du libellé.
+Avec `"formulaire": true`, l'étape vérifie aussi l'état du formulaire soumis et produit des
+signalements « à vérifier » : erreurs non reliées aux champs (**11.10**), focus non déplacé
+vers la première erreur (**12.8**), `<title>` inchangé (**8.6**), messages hors zone de
+statut (**7.5**). Un parcours apparaît dans le rapport comme une section « Parcours « nom » ».
+Exemple complet : [exemples/parcours-cartesgouv.json](exemples/parcours-cartesgouv.json).
 
 ### Pages protégées (connexion SSO)
 
@@ -104,6 +133,7 @@ dans la configuration (`login.usernameSelector`, `login.passwordSelector`,
 
 Voir [rgaa.config.json](rgaa.config.json). Champs supplémentaires disponibles :
 
+- `parcours` : tableau de parcours (voir ci-dessus) ;
 - `ignoreRules` : liste de règles axe à désactiver (ex. `["color-contrast"]`) ;
 - `httpHeaders` : en-têtes HTTP à envoyer (ex. jeton d'accès à un environnement de recette) ;
 - `basicAuth` : `{ "username": "...", "password": "..." }` ;
@@ -132,8 +162,13 @@ Voir [rgaa.config.json](rgaa.config.json). Champs supplémentaires disponibles :
 
 Deux rapports sont générés dans le dossier de sortie :
 
-- `rgaa-report.json` : exploitable en CI (par exemple pour un commentaire de merge request) ;
+- `rgaa-report.json` : exploitable en CI (par exemple pour un commentaire de merge request).
+  Chaque page y liste aussi ses liens internes (`links`), utiles pour élargir l'échantillon —
+  notamment découvrir les pages d'un espace connecté ;
 - `rgaa-report.html` : rapport lisible avec critères RGAA, thématiques, sévérités et extraits HTML fautifs.
+
+En cas d'échec d'analyse inexpliqué (SSO, SPA), `RGAA_DEBUG=1` enregistre une capture d'écran du
+navigateur dans `<sortie>/captures-echecs/`.
 
 ## Intégration CI
 
