@@ -10,6 +10,7 @@ pf-*/
 rapport-rgaa-global.*
 test/.tmp/
 test/.tmp-ia/
+test/.tmp-sso/
 .env
 rgaa-mutdev*/
 rgaa-cartes-mut-dev/

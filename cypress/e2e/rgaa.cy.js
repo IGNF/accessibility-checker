@@ -166,7 +166,45 @@ function runInteractionPasses(page) {
   });
 }
 
+/** Remplit et soumet le formulaire de connexion. Autonome : cy.origin la sérialise. */
+function fillLoginForm({ user, password, usernameSelector, passwordSelector, submitSelector }) {
+  cy.get(usernameSelector, { timeout: 30000 }).clear().type(user, { log: false, parseSpecialCharSequences: false });
+  cy.get(passwordSelector).clear().type(password, { log: false, parseSpecialCharSequences: false });
+  cy.get(submitSelector).first().click();
+}
+
+/**
+ * Connexion SSO mémorisée par cy.session : le formulaire n'est rempli qu'une fois
+ * (dans un test dédié, exécuté en premier), puis cookies et stockage sont restaurés
+ * pour chaque page, Cypress isolant chaque test. L'origine principale d'un test est
+ * celle où aboutit sa première visite : si la connexion était faite dans le test
+ * d'une page, la visite du SSO deviendrait cette origine et les commandes sur la
+ * page échoueraient.
+ */
+function restoreLoginSession() {
+  const creds = {
+    ...conf.login,
+    user: Cypress.env('RGAA_LOGIN_USER'),
+    password: Cypress.env('RGAA_LOGIN_PASSWORD')
+  };
+  const loginUrl = conf.login.url ?? conf.urls[0];
+  const siteOrigin = new URL(loginUrl).origin;
+  cy.session(['rgaa-sso', conf.login.origin, loginUrl], () => {
+    cy.visit(loginUrl, { headers: conf.httpHeaders ?? {}, auth: conf.basicAuth ?? undefined, failOnStatusCode: false });
+    cy.location('origin', { log: false }).then((origin) => {
+      // Redirection HTTP suivie par cy.visit : le formulaire est déjà l'origine courante.
+      // Redirection côté client (SPA) : il faut basculer sur l'origine du SSO.
+      if (origin === conf.login.origin) fillLoginForm(creds);
+      else cy.origin(conf.login.origin, { args: creds }, fillLoginForm);
+    });
+    // Retour sur le site : la connexion a abouti (un échec laisserait sur le SSO)
+    cy.location('origin', { timeout: 30000 }).should('eq', siteOrigin);
+  });
+}
+
 describe('Audit RGAA (critères automatisables)', () => {
+  if (conf.login) it(`connexion SSO via ${conf.login.origin}`, restoreLoginSession);
+
   conf.urls.forEach((url) => {
     it(`analyse ${url}`, () => {
       // Neutralise la CSP (en-tête et balise meta) qui bloquerait l'injection d'axe-core
@@ -183,26 +221,23 @@ describe('Audit RGAA (critères automatisables)', () => {
         });
       });
 
+      if (conf.login) restoreLoginSession();
+
       cy.visit(url, {
         headers: conf.httpHeaders ?? {},
         auth: conf.basicAuth ?? undefined,
         failOnStatusCode: false
       });
 
-      // Page protégée : l'application redirige vers un formulaire de connexion sur une autre
-      // origine (SSO) ; on le remplit puis on laisse le SSO renvoyer vers la page auditée.
+      // Session restaurée : un éventuel aller-retour silencieux vers le SSO (cookie de
+      // session) doit être terminé avant toute commande sur le DOM ; cy.location
+      // patiente tant que l'application est sur une autre origine.
       if (conf.login) {
-        const creds = {
-          ...conf.login,
-          user: Cypress.env('RGAA_LOGIN_USER'),
-          password: Cypress.env('RGAA_LOGIN_PASSWORD')
-        };
-        cy.origin(conf.login.origin, { args: creds }, ({ user, password, usernameSelector, passwordSelector, submitSelector }) => {
-          cy.get(usernameSelector, { timeout: 30000 }).clear().type(user, { log: false, parseSpecialCharSequences: false });
-          cy.get(passwordSelector).clear().type(password, { log: false, parseSpecialCharSequences: false });
-          cy.get(submitSelector).first().click();
-        });
-        cy.location('origin', { timeout: 30000 }).should('eq', new URL(url).origin);
+        const pageOrigin = new URL(url).origin;
+        cy.wait(conf.waitAfterLoad || 1000);
+        cy.location('origin', { timeout: 30000 }).should('eq', pageOrigin);
+        cy.wait(500);
+        cy.location('origin', { timeout: 30000 }).should('eq', pageOrigin);
       }
 
       // Attend le rendu effectif (SPA) : le DOM doit contenir un contenu significatif

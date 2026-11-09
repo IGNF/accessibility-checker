@@ -53,6 +53,8 @@ node bin/rgaa-ci.js --config rgaa.config.json
 | `--ai-model <nom>` | Modèle Anthropic utilisé | `claude-haiku-4-5` |
 | `--ai-max-items <n>` | Éléments max soumis à l'IA par page | `20` |
 | `--no-interactions` | Désactive les scénarios d'interaction génériques (voir ci-dessous) | activés |
+| `--login-origin <url>` | Origine du SSO (Keycloak…) vers lequel redirigent les pages protégées ; identifiants dans `RGAA_LOGIN_USER` / `RGAA_LOGIN_PASSWORD` | — |
+| `--login-url <url>` | Page qui déclenche la connexion (ex. `https://site/login`) | première URL |
 | `--no-html` | Désactive le rapport HTML | — |
 | `--quiet` | Sortie console minimale | — |
 
@@ -76,6 +78,28 @@ occurrences **nouvelles** sont ajoutées au rapport, annotées de l'état qui le
 et 5 modales par page. Désactivable avec `--no-interactions` ou `"interactions": false`
 dans la configuration.
 
+### Pages protégées (connexion SSO)
+
+Pour auditer des pages réservées aux utilisateurs connectés (tableau de bord, espace
+personnel…), indiquez l'origine du fournisseur d'identité et fournissez les identifiants
+**par variables d'environnement**, jamais en ligne de commande ni dans un fichier versionné :
+
+```bash
+export RGAA_LOGIN_USER='auditeur@example.org'
+export RGAA_LOGIN_PASSWORD='…'
+rgaa-ci --login-origin https://sso.geopf.fr --login-url https://cartes.gouv.fr/login \
+        --url https://cartes.gouv.fr/tableau-de-bord/ --url https://cartes.gouv.fr/accessibilite/
+```
+
+Fonctionnement : un test Cypress dédié visite `--login-url` (redirection HTTP ou côté
+client vers le SSO), remplit le formulaire (sélecteurs Keycloak par défaut :
+`input[name="username"]`, `input[name="password"]`, `button[type="submit"]`) et attend le
+retour sur le site. La session (cookies, stockage) est ensuite **restaurée pour chaque
+page** via `cy.session` : une seule authentification par exécution. Si la première URL
+analysée est publique, `--login-url` est indispensable. Les sélecteurs se personnalisent
+dans la configuration (`login.usernameSelector`, `login.passwordSelector`,
+`login.submitSelector`).
+
 ### Fichier de configuration
 
 Voir [rgaa.config.json](rgaa.config.json). Champs supplémentaires disponibles :
@@ -83,6 +107,7 @@ Voir [rgaa.config.json](rgaa.config.json). Champs supplémentaires disponibles :
 - `ignoreRules` : liste de règles axe à désactiver (ex. `["color-contrast"]`) ;
 - `httpHeaders` : en-têtes HTTP à envoyer (ex. jeton d'accès à un environnement de recette) ;
 - `basicAuth` : `{ "username": "...", "password": "..." }` ;
+- `login` : `{ "origin": "https://sso.example.org", "url": "https://site/login", "usernameSelector": "…", "passwordSelector": "…", "submitSelector": "…" }` — les identifiants restent dans `RGAA_LOGIN_USER` / `RGAA_LOGIN_PASSWORD` ;
 - `ai` : `{ "enabled": true, "model": null, "maxItemsPerPage": 20 }` — la clé API n'est
   **jamais** mise dans ce fichier : uniquement la variable d'environnement `ANTHROPIC_API_KEY`.
 

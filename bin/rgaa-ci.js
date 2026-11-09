@@ -35,8 +35,12 @@ Options :
   --ai-model <nom>       Modèle Anthropic à utiliser (défaut : claude-haiku-4-5)
   --ai-max-items <n>     Nombre max d'éléments soumis à l'IA par page (défaut : 20)
   --login-origin <url>   Origine du formulaire de connexion (SSO Keycloak…) vers lequel
-                         les pages redirigent, ex. https://sso.example.org. Les identifiants
-                         sont lus dans RGAA_LOGIN_USER et RGAA_LOGIN_PASSWORD (jamais en CLI).
+                         les pages protégées redirigent, ex. https://sso.example.org. Les
+                         identifiants sont lus dans RGAA_LOGIN_USER et RGAA_LOGIN_PASSWORD
+                         (jamais en CLI). La connexion est faite une fois, puis la session
+                         est réutilisée pour toutes les pages.
+  --login-url <url>      Page qui déclenche la connexion (ex. https://site/login). Défaut :
+                         la première URL analysée — à préciser si celle-ci est publique.
   --no-interactions      Désactiver les scénarios d'interaction génériques (ouverture des
                          menus, dépliables et modales avant réanalyse ; menu ouvert à 320 px).
   --no-html              Ne pas générer le rapport HTML
@@ -68,6 +72,7 @@ function parseArgs(argv) {
       case '--ai-model': args.aiModel = argv[++i]; break;
       case '--ai-max-items': args.aiMaxItems = Number(argv[++i]); break;
       case '--login-origin': args.loginOrigin = argv[++i]; break;
+      case '--login-url': args.loginUrl = argv[++i]; break;
       case '--no-interactions': args.interactions = false; break;
       case '--no-html': args.html = false; break;
       case '--quiet': args.quiet = true; break;
@@ -117,6 +122,7 @@ function loadConfig(args) {
     login: (args.loginOrigin ?? fileConf.login?.origin)
       ? {
           origin: args.loginOrigin ?? fileConf.login.origin,
+          url: args.loginUrl ?? fileConf.login?.url ?? null,
           // name="username"/"password" est stable sur Keycloak, l'id varie selon le thème (ex. DSFR : id généré)
           usernameSelector: fileConf.login?.usernameSelector ?? 'input[name="username"], #username',
           passwordSelector: fileConf.login?.passwordSelector ?? 'input[name="password"], #password',
@@ -150,6 +156,10 @@ function loadConfig(args) {
   if (conf.login) {
     if (!/^https?:\/\/[^/]+$/.test(conf.login.origin)) {
       console.error('--login-origin doit être une origine sans chemin, ex. https://sso.example.org');
+      process.exit(2);
+    }
+    if (conf.login.url && !/^https?:\/\//.test(conf.login.url)) {
+      console.error('--login-url doit être une URL absolue, ex. https://site.example.org/login');
       process.exit(2);
     }
     if (!process.env.RGAA_LOGIN_USER || !process.env.RGAA_LOGIN_PASSWORD) {
