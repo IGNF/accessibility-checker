@@ -167,6 +167,10 @@ Deux rapports sont générés dans le dossier de sortie :
   notamment découvrir les pages d'un espace connecté ;
 - `rgaa-report.html` : rapport lisible avec critères RGAA, thématiques, sévérités et extraits HTML fautifs.
 
+Pour un **rapport de synthèse autonome** (taux indicatif, synthèse par critère, anomalies
+prioritaires, pages, parcours, signalements, couverture, annexe) en HTML et PDF :
+`node scripts/rapport-plateforme.mjs <dossier-de-sortie> --nom "Ma plateforme"` (PDF via google-chrome).
+
 En cas d'échec d'analyse inexpliqué (SSO, SPA), `RGAA_DEBUG=1` enregistre une capture d'écran du
 navigateur dans `<sortie>/captures-echecs/`.
 
